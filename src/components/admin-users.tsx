@@ -30,7 +30,7 @@ export function AdminUsers() {
     const response = await fetch('/api/admin/users', { cache: 'no-store' });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
-      setError(payload.error || 'Khong tai duoc danh sach user.');
+      setError(payload.error || 'Không tải được danh sách user.');
       return;
     }
     setUsers(payload.users || []);

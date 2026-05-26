@@ -20,7 +20,7 @@ export function LoginForm() {
       });
       const payload = await response.json();
       if (!response.ok || !payload.ok) {
-        setError(payload.error || 'Khong dang nhap duoc.');
+        setError(payload.error || 'Không đăng nhập được.');
         return;
       }
       window.location.href = '/app';

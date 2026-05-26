@@ -1,11 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   AlertTriangle,
   Calculator,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Edit3,
   ListChecks,
   Plus,
@@ -93,12 +96,15 @@ export function Dashboard() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const workspaceCache = useRef<Record<string, Workspace>>({});
+  const requestSeq = useRef(0);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [ticketText, setTicketText] = useState('');
   const [issueDrafts, setIssueDrafts] = useState<Record<string, string>>({});
   const [editingMessageId, setEditingMessageId] = useState('');
   const [editingText, setEditingText] = useState('');
+  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -115,20 +121,36 @@ export function Dashboard() {
   const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
 
   useEffect(() => {
-    loadWorkspace();
+    loadWorkspace({ targetDate: date, targetRegion: region });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, region]);
 
-  async function loadWorkspace() {
-    setError('');
-    const response = await fetch(`/api/workspace?date=${date}&region=${region}`, { cache: 'no-store' });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) {
-      setError(payload.error || 'Không tải được dữ liệu.');
-      return;
+  async function loadWorkspace(options?: { force?: boolean; targetDate?: string; targetRegion?: Region }) {
+    const queryDate = options?.targetDate || date;
+    const queryRegion = options?.targetRegion || region;
+    const cacheKey = `${queryDate}|${queryRegion}`;
+    if (!options?.force && workspaceCache.current[cacheKey]) {
+      setWorkspace(workspaceCache.current[cacheKey]);
     }
-    setWorkspace(payload as Workspace);
-    setSelectedPlayerId(current => current || payload.players?.[0]?.id || '');
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/workspace?date=${queryDate}&region=${queryRegion}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (seq !== requestSeq.current) return;
+      if (!response.ok || !payload.ok) {
+        setError(payload.error || 'Không tải được dữ liệu.');
+        return;
+      }
+      workspaceCache.current[cacheKey] = payload as Workspace;
+      setWorkspace(payload as Workspace);
+      setSelectedPlayerId(current => current || payload.players?.[0]?.id || '');
+    } catch {
+      if (seq === requestSeq.current) setError('Không tải được dữ liệu.');
+    } finally {
+      if (seq === requestSeq.current) setLoading(false);
+    }
   }
 
   function submitTicket(event: React.FormEvent<HTMLFormElement>) {
@@ -146,7 +168,7 @@ export function Dashboard() {
       const issueCount = response.issues?.length || 0;
       setNotice(issueCount ? `Đã lưu phần đọc được, còn ${issueCount} tin cần sửa.` : 'Đã thêm tin.');
       if (!issueCount) setTicketText('');
-      await loadWorkspace();
+      await loadWorkspace({ force: true });
     });
   }
 
@@ -158,7 +180,7 @@ export function Dashboard() {
       if (!response.ok) return setError(response.error);
       setNewPlayerName('');
       setSelectedPlayerId(response.player.id);
-      await loadWorkspace();
+      await loadWorkspace({ force: true });
     });
   }
 
@@ -167,7 +189,7 @@ export function Dashboard() {
     const response = await apiPatch('/api/players', { id: activePlayer.id, rateProfile });
     if (!response.ok) return setError(response.error);
     setNotice('Đã lưu hệ số và tỉ lệ cho khách.');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   async function reparseIssue(issue: ParseIssue) {
@@ -176,14 +198,14 @@ export function Dashboard() {
     const response = await apiPost(`/api/ticket-messages/${issue.ticket_message_id}/reparse`, { correctedText });
     if (!response.ok) return setError(response.error);
     setNotice(response.issues?.length ? 'Đã parse lại, vẫn còn cảnh báo cần xem.' : 'Đã sửa và đóng cảnh báo.');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   async function ignoreIssue(issue: ParseIssue) {
     const response = await apiPatch(`/api/parse-issues/${issue.id}`, { status: 'ignored' });
     if (!response.ok) return setError(response.error);
     setNotice('Đã bỏ qua tin này.');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   function startEdit(ticket: Ticket) {
@@ -198,7 +220,7 @@ export function Dashboard() {
     setNotice(response.issues?.length ? 'Đã sửa tin, vẫn còn cảnh báo cần xử lý.' : 'Đã sửa tin và cập nhật bảng vé.');
     setEditingMessageId('');
     setEditingText('');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   async function deleteMessage(ticket: Ticket) {
@@ -207,7 +229,7 @@ export function Dashboard() {
     const response = await apiDelete(`/api/ticket-messages/${ticket.ticket_message_id}`);
     if (!response.ok) return setError(response.error);
     setNotice('Đã xóa tin và các vé liên quan.');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   async function checkAll() {
@@ -217,7 +239,7 @@ export function Dashboard() {
       const response = await apiPost('/api/check', { date, region });
       if (!response.ok) return setError(response.error);
       setNotice(response.message || `Đã dò ${response.checked?.length || 0} vé.`);
-      await loadWorkspace();
+      await loadWorkspace({ force: true });
     });
   }
 
@@ -231,7 +253,7 @@ export function Dashboard() {
     const response = await apiDelete('/api/workspace/reset', body);
     if (!response.ok) return setError(response.error);
     setNotice(scope === 'all' ? 'Đã xóa toàn bộ dữ liệu của tài khoản.' : 'Đã xóa dữ liệu ngày/miền hiện tại.');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   return (
@@ -240,10 +262,14 @@ export function Dashboard() {
 
       <div className="workspace">
         <div className="main-flow">
-          <section className="control-panel">
+          <section className={`control-panel ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
             <div className="date-control">
-              <span>Ngày làm việc</span>
-              <input type="date" value={date} onChange={event => setDate(event.target.value)} />
+              <button className="date-step" type="button" title="Ngày trước" onClick={() => setDate(shiftDate(date, -1))}><ChevronLeft size={17} /></button>
+              <label>
+                <span><CalendarDays size={14} /> Ngày làm việc</span>
+                <input type="date" value={date} onChange={event => setDate(event.target.value)} />
+              </label>
+              <button className="date-step" type="button" title="Ngày sau" onClick={() => setDate(shiftDate(date, 1))}><ChevronRight size={17} /></button>
             </div>
             <div className="region-control" role="tablist" aria-label="Chọn miền">
               {REGIONS.map(item => (
@@ -254,20 +280,21 @@ export function Dashboard() {
               ))}
             </div>
             <div className="control-actions">
-              <button className="btn soft" type="button" onClick={loadWorkspace}><RefreshCw size={17} /> Tải lại</button>
+              <button className="btn soft" type="button" onClick={() => loadWorkspace({ force: true })}><RefreshCw size={17} className={loading ? 'spin' : ''} /> Tải lại</button>
               <Link className="btn soft" href="/results"><ListChecks size={17} /> Trang KQ</Link>
               <button className="btn green" type="button" onClick={checkAll} disabled={pending}><Calculator size={17} /> Dò vé</button>
             </div>
+            {loading ? <span className="loading-chip"><RefreshCw size={14} className="spin" /> Đang tải</span> : null}
           </section>
 
           {notice ? <div className="notice">{notice}</div> : null}
           {error ? <div className="error">{error}</div> : null}
 
           <section className="summary-grid">
-            <div className="metric"><span>Vé trong ngày</span><strong>{totals.tickets}</strong></div>
-            <div className="metric"><span>Tổng xác</span><strong>{money(totals.xac)}</strong></div>
-            <div className="metric"><span>Tổng thắng</span><strong>{money(totals.win)}</strong></div>
-            <div className="metric"><span>Lãi lỗ</span><strong className={totals.win - totals.xac >= 0 ? 'positive' : 'negative'}>{money(totals.win - totals.xac)}</strong></div>
+            <div className="metric metric-blue"><span>Vé trong ngày</span><strong>{totals.tickets}</strong><small>{regionName(region)}</small></div>
+            <div className="metric metric-teal"><span>Tổng xác</span><strong>{money(totals.xac)}</strong><small>Tiền nhận</small></div>
+            <div className="metric metric-green"><span>Tổng thắng</span><strong>{money(totals.win)}</strong><small>Đã dò</small></div>
+            <div className="metric metric-amber"><span>Lãi lỗ</span><strong className={totals.win - totals.xac >= 0 ? 'positive' : 'negative'}>{money(totals.win - totals.xac)}</strong><small>Theo ngày/miền</small></div>
           </section>
 
           <section className="section input-section">
@@ -536,6 +563,13 @@ function todayKey() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function shiftDate(value: string, days: number) {
+  const next = new Date(`${value}T00:00:00`);
+  next.setDate(next.getDate() + days);
+  const offset = next.getTimezoneOffset() * 60_000;
+  return new Date(next.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function regionName(region: Region) {

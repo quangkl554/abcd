@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, useTransition } from 'react';
-import { Calculator, Download, ExternalLink, FileText, RefreshCw, Save } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Calculator, CalendarDays, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { AppHeader } from './app-header';
 
 type Region = 'nam' | 'trung' | 'bac';
@@ -61,7 +61,10 @@ export function ResultsPage() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const workspaceCache = useRef<Record<string, Workspace>>({});
+  const requestSeq = useRef(0);
   const [manualKq, setManualKq] = useState('');
+  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -77,19 +80,35 @@ export function ResultsPage() {
   }, [workspace]);
 
   useEffect(() => {
-    loadWorkspace();
+    loadWorkspace({ targetDate: date, targetRegion: region });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, region]);
 
-  async function loadWorkspace() {
-    setError('');
-    const response = await fetch(`/api/workspace?date=${date}&region=${region}`, { cache: 'no-store' });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) {
-      setError(payload.error || 'Không tải được dữ liệu.');
-      return;
+  async function loadWorkspace(options?: { force?: boolean; targetDate?: string; targetRegion?: Region }) {
+    const queryDate = options?.targetDate || date;
+    const queryRegion = options?.targetRegion || region;
+    const cacheKey = `${queryDate}|${queryRegion}`;
+    if (!options?.force && workspaceCache.current[cacheKey]) {
+      setWorkspace(workspaceCache.current[cacheKey]);
     }
-    setWorkspace(payload as Workspace);
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/workspace?date=${queryDate}&region=${queryRegion}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (seq !== requestSeq.current) return;
+      if (!response.ok || !payload.ok) {
+        setError(payload.error || 'Không tải được dữ liệu.');
+        return;
+      }
+      workspaceCache.current[cacheKey] = payload as Workspace;
+      setWorkspace(payload as Workspace);
+    } catch {
+      if (seq === requestSeq.current) setError('Không tải được dữ liệu.');
+    } finally {
+      if (seq === requestSeq.current) setLoading(false);
+    }
   }
 
   async function fetchDraw() {
@@ -102,7 +121,7 @@ export function ResultsPage() {
         setNotice(`${response.reason} Hãy dán kết quả thủ công ở khung bên dưới.`);
       } else {
         setNotice('Đã tải và lưu kết quả tự động.');
-        await loadWorkspace();
+        await loadWorkspace({ force: true });
       }
     });
   }
@@ -113,7 +132,7 @@ export function ResultsPage() {
     if (!response.ok) return setError(response.error);
     setManualKq('');
     setNotice('Đã lưu kết quả dán tay.');
-    await loadWorkspace();
+    await loadWorkspace({ force: true });
   }
 
   async function checkAll() {
@@ -123,8 +142,27 @@ export function ResultsPage() {
       const response = await apiPost('/api/check', { date, region });
       if (!response.ok) return setError(response.error);
       setNotice(response.message || `Đã dò ${response.checked?.length || 0} vé.`);
-      await loadWorkspace();
+      await loadWorkspace({ force: true });
     });
+  }
+
+  async function deleteDrawResults() {
+    const confirmText = window.prompt(`Nhập chính xác XOA KQ để xóa kết quả đã lưu của ${regionName(region)} ngày ${date}.`);
+    if (confirmText !== 'XOA KQ') return;
+    const response = await apiDelete('/api/draw-results', { date, region, confirm: confirmText });
+    if (!response.ok) return setError(response.error);
+    setNotice('Đã xóa kết quả xổ số của ngày/miền hiện tại.');
+    await loadWorkspace({ force: true });
+  }
+
+  async function resetDayRegion() {
+    const confirmText = window.prompt(`Nhập chính xác XOA TAT CA để xóa toàn bộ vé, tin lỗi và kết quả của ${regionName(region)} ngày ${date}.`);
+    if (confirmText !== 'XOA TAT CA') return;
+    const response = await apiDelete('/api/workspace/reset', { scope: 'day-region', date, region, confirm: confirmText });
+    if (!response.ok) return setError(response.error);
+    setManualKq('');
+    setNotice('Đã xóa toàn bộ dữ liệu của ngày/miền hiện tại.');
+    await loadWorkspace({ force: true });
   }
 
   return (
@@ -133,10 +171,14 @@ export function ResultsPage() {
 
       <div className="workspace results-workspace">
         <div className="main-flow">
-          <section className="control-panel">
+          <section className={`control-panel ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
             <div className="date-control">
-              <span>Ngày kết quả</span>
-              <input type="date" value={date} onChange={event => setDate(event.target.value)} />
+              <button className="date-step" type="button" title="Ngày trước" onClick={() => setDate(shiftDate(date, -1))}><ChevronLeft size={17} /></button>
+              <label>
+                <span><CalendarDays size={14} /> Ngày kết quả</span>
+                <input type="date" value={date} onChange={event => setDate(event.target.value)} />
+              </label>
+              <button className="date-step" type="button" title="Ngày sau" onClick={() => setDate(shiftDate(date, 1))}><ChevronRight size={17} /></button>
             </div>
             <div className="region-control" role="tablist" aria-label="Chọn miền">
               {REGIONS.map(item => (
@@ -150,16 +192,17 @@ export function ResultsPage() {
               <Link className="btn soft" href="/app"><FileText size={17} /> Bảng vé</Link>
               <button className="btn green" type="button" onClick={checkAll} disabled={pending}><Calculator size={17} /> Dò kết quả</button>
             </div>
+            {loading ? <span className="loading-chip"><RefreshCw size={14} className="spin" /> Đang tải</span> : null}
           </section>
 
           {notice ? <div className="notice">{notice}</div> : null}
           {error ? <div className="error">{error}</div> : null}
 
           <section className="summary-grid">
-            <div className="metric"><span>Vé</span><strong>{totals.tickets}</strong></div>
-            <div className="metric"><span>Đã dò</span><strong>{totals.checked}</strong></div>
-            <div className="metric"><span>Tổng xác</span><strong>{money(totals.xac)}</strong></div>
-            <div className="metric"><span>Tổng thắng</span><strong>{money(totals.win)}</strong></div>
+            <div className="metric metric-blue"><span>Vé</span><strong>{totals.tickets}</strong><small>{regionName(region)}</small></div>
+            <div className="metric metric-teal"><span>Đã dò</span><strong>{totals.checked}</strong><small>Có trạng thái</small></div>
+            <div className="metric metric-amber"><span>Tổng xác</span><strong>{money(totals.xac)}</strong><small>Tiền nhận</small></div>
+            <div className="metric metric-green"><span>Tổng thắng</span><strong>{money(totals.win)}</strong><small>Tiền trả</small></div>
           </section>
 
           <section className="section">
@@ -185,7 +228,7 @@ export function ResultsPage() {
             <div className="section-header">
               <div>
                 <h2 className="section-title"><Save size={18} /> Dán kết quả thủ công</h2>
-                <p className="section-note">Format bám theo 3 file HTML cũ: nhận tên đài, nhãn giải và số theo từng dòng.</p>
+                <p className="section-note">Mỗi lần lưu áp dụng cho miền đang chọn. Muốn nhập đủ 3 miền trong một ngày thì chuyển Nam, Trung, Bắc và lưu từng miền.</p>
               </div>
               <button className="btn primary" type="button" onClick={saveManualDraw}><Save size={17} /> Lưu dán tay</button>
             </div>
@@ -246,6 +289,17 @@ export function ResultsPage() {
               {!workspace?.summary.length ? <div className="empty-state compact">Chưa có vé để tổng hợp.</div> : null}
             </div>
           </section>
+
+          <section className="section danger-zone">
+            <div className="section-header">
+              <h2 className="section-title"><Trash2 size={18} /> Xóa thủ công</h2>
+            </div>
+            <p className="section-note">Kết quả và dữ liệu được giữ theo ngày. Qua ngày mới hệ thống không tự xóa, bạn chủ động dọn khi cần.</p>
+            <div className="form-grid">
+              <button className="btn amber" type="button" onClick={deleteDrawResults}><Trash2 size={16} /> Xóa KQ ngày/miền</button>
+              <button className="btn red" type="button" onClick={resetDayRegion}><Trash2 size={16} /> Xóa dữ liệu ngày/miền</button>
+            </div>
+          </section>
         </aside>
       </div>
     </main>
@@ -262,6 +316,16 @@ async function apiPost(url: string, body: unknown) {
   return { ok: response.ok && payload.ok, ...payload };
 }
 
+async function apiDelete(url: string, body: unknown) {
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  return { ok: response.ok && payload.ok, ...payload };
+}
+
 function money(value: number) {
   return Number(value || 0).toLocaleString('vi-VN');
 }
@@ -270,4 +334,15 @@ function todayKey() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function shiftDate(value: string, days: number) {
+  const next = new Date(`${value}T00:00:00`);
+  next.setDate(next.getDate() + days);
+  const offset = next.getTimezoneOffset() * 60_000;
+  return new Date(next.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function regionName(region: Region) {
+  return REGIONS.find(item => item.id === region)?.label || region;
 }
