@@ -1,0 +1,829 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const core = require('../src/lib/xoso-core.cjs');
+
+test('parse simple player header rate as 2c shortcut', () => {
+  const header = core.extractPlayerHeader('người 1 (700,700):\n61 68b 75n', 'nam');
+  assert.equal(header.playerName, 'người 1');
+  assert.equal(header.profile.heSoXac.Lo, 700);
+  assert.equal(header.profile.tyLe.Lo, 70000);
+  assert.equal(header.profile.heSoXac['3Cang'], undefined);
+});
+
+test('parse standalone player header without colon', () => {
+  const header = core.extractPlayerHeader('nguoi 3 (700,700)', 'nam');
+  assert.equal(header.playerName, 'nguoi 3');
+  assert.equal(header.bodyText, '');
+  assert.equal(header.profile.heSoXac.Lo, 700);
+});
+
+test('parse inline rate group before parenthesized rate', () => {
+  const header = core.extractPlayerHeader('nguoi 1 2c (700,700)', 'nam');
+  assert.equal(header.playerName, 'nguoi 1');
+  assert.equal(header.rateText, '2c=700,700');
+  assert.equal(header.profile.heSoXac.Lo, 700);
+
+  const threeC = core.extractPlayerHeader('nguoi 1 3c (690,6000)', 'nam');
+  assert.equal(threeC.playerName, 'nguoi 1');
+  assert.equal(threeC.profile.heSoXac['3Cang'], 690);
+  assert.equal(threeC.profile.tyLe['3Cang'], 600000);
+  assert.equal(threeC.profile.heSoXac.Lo, undefined);
+});
+
+test('parse detailed rate profile by groups', () => {
+  const profile = core.parseRateProfile('2c=700/700, 3c=690/6000, xc=680/5500', 'nam');
+  assert.equal(profile.heSoXac.Lo, 700);
+  assert.equal(profile.tyLe.Lo, 70000);
+  assert.equal(profile.heSoXac['3Cang'], 690);
+  assert.equal(profile.tyLe['3Cang'], 600000);
+  assert.equal(profile.heSoXac.XiuChu, 680);
+  assert.equal(profile.tyLe.XiuChu, 550000);
+});
+
+test('parse detailed rate profile with comma separators', () => {
+  const profile = core.parseRateProfile('2c=700,700 3c=690,6000 xc=700,5500', 'nam');
+  assert.equal(profile.heSoXac.Lo, 700);
+  assert.equal(profile.tyLe.Lo, 70000);
+  assert.equal(profile.heSoXac['3Cang'], 690);
+  assert.equal(profile.tyLe['3Cang'], 600000);
+  assert.equal(profile.heSoXac.XiuChu, 700);
+  assert.equal(profile.tyLe.XiuChu, 550000);
+});
+
+test('parse shortened display rate profile without changing numeric meaning', () => {
+  const profile = core.parseRateProfile('2c=70,70 3c=69,600 xc=70,550', 'nam');
+  assert.equal(profile.heSoXac.Lo, 700);
+  assert.equal(profile.tyLe.Lo, 70000);
+  assert.equal(profile.heSoXac['3Cang'], 690);
+  assert.equal(profile.tyLe['3Cang'], 600000);
+  assert.equal(profile.heSoXac.XiuChu, 700);
+  assert.equal(profile.tyLe.XiuChu, 550000);
+
+  const header = core.extractPlayerHeader('nguoi 1 2c (70,70)', 'nam');
+  assert.equal(header.playerName, 'nguoi 1');
+  assert.equal(header.rateText, '2c=70,70');
+  assert.equal(header.profile.heSoXac.Lo, 700);
+  assert.equal(header.profile.tyLe.Lo, 70000);
+});
+
+test('rate profile can override coefficients by region', () => {
+  const profile = {
+    byRegion: {
+      nam: { heSoXac: { Lo: 720 }, tyLe: {} },
+      bac: { heSoXac: { Lo: 820, '3Cang': 720 }, tyLe: {} },
+    },
+  };
+  assert.equal(core.mergeRates('nam', profile).heSoXac.Lo, 720);
+  assert.equal(core.mergeRates('bac', profile).heSoXac.Lo, 820);
+  assert.equal(core.mergeRates('bac', profile).heSoXac['3Cang'], 720);
+});
+
+test('parse one Telegram message split by nam trung bac headings', () => {
+  const rates = {
+    byRegion: {
+      nam: { heSoXac: { Lo: 720 }, tyLe: {} },
+      trung: { heSoXac: { Lo: 720 }, tyLe: {} },
+      bac: { heSoXac: { Lo: 820 }, tyLe: {} },
+    },
+  };
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 2:\nnam\nb 39 10n\ntrung\nb 78 5n\nbac\nbao 61 10d',
+    region: 'nam',
+    rates,
+    date: new Date(2026, 4, 12),
+  });
+
+  assert.equal(parsed.tickets.length, 3);
+  assert.deepEqual(parsed.tickets.map(t => t.region), ['nam', 'trung', 'bac']);
+  assert.deepEqual(parsed.tickets.map(t => t.heSoXac), [720, 720, 820]);
+});
+
+test('parse one Telegram message split by region and player headings', () => {
+  const parsed = core.parseMultiTelegramEnvelope({
+    text: 'nam\nngười 1\nb 12 10n\ntrung\nngười 2\nb 34 20n',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+
+  assert.equal(parsed.tickets.length, 2);
+  assert.deepEqual(parsed.tickets.map(t => t.playerName), ['người 1', 'người 2']);
+  assert.deepEqual(parsed.tickets.map(t => t.region), ['nam', 'trung']);
+  assert.deepEqual(parsed.tickets.map(t => t.soList), [['12'], ['34']]);
+  assert.equal(parsed.blocks.length, 2);
+});
+
+test('parse Telegram envelope with legacy free-form southern ticket text', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1 (700,700):\n61 68b 75n dd 280n 061 068 261 268b 10n xc 75n',
+    region: 'nam',
+    activeDai: ['TP.HCM', 'Đồng Tháp', 'Cà Mau'],
+    idFactory: (() => {
+      let i = 0;
+      return () => `t${++i}`;
+    })(),
+  });
+
+  assert.equal(parsed.playerName, 'người 1');
+  assert.equal(parsed.tickets.length, 4);
+  assert.deepEqual(
+    parsed.tickets.map(t => t.loai),
+    ['Lo', 'DauDuoi', '3Cang', 'XiuChu'],
+  );
+  assert.equal(parsed.tickets[0].xac, 75 * 2 * 18 * 700);
+  assert.equal(parsed.tickets[1].xac, 280 * 2 * 2 * 700);
+  assert.equal(parsed.tickets[2].tyLeTrung, 600000);
+});
+
+test('parse Telegram envelope ignores standalone region line', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1 (700,700):\nnam\nlo 12 34 10d',
+    region: 'bac',
+    activeDai: ['TP.HCM', 'Dong Thap', 'Ca Mau'],
+  });
+
+  assert.equal(parsed.region, 'nam');
+  assert.equal(parsed.playerName, 'nguoi 1');
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.warnings.some(w => w.includes('"nam"')), false);
+});
+
+test('parse split Telegram ticket using fallback active player and rates', () => {
+  const active = core.parseTelegramEnvelope({
+    text: 'nguoi 3 (700,700)',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  const parsed = core.parseTelegramEnvelope({
+    text: 'b 11 22 33 123 50n',
+    region: 'nam',
+    fallbackPlayer: active.playerName,
+    rates: active.rates,
+    activeDai: ['TP.HCM'],
+  });
+
+  assert.equal(active.playerName, 'nguoi 3');
+  assert.equal(active.tickets.length, 0);
+  assert.equal(parsed.playerName, 'nguoi 3');
+  assert.equal(parsed.tickets.length, 2);
+  assert.equal(parsed.tickets[0].heSoXac, 700);
+  assert.equal(parsed.warnings.some(w => w.includes('MISSING_PLAYER')), false);
+});
+
+test('parse compact type tokens like b123 and dd100n', () => {
+  const first = core.parseTelegramEnvelope({
+    text: 'nguoi 3 (700,700):\nb 12 13 14 51 50n dd100n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.deepEqual(first.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
+  assert.equal(first.tickets[1].tienDat, 100);
+  assert.deepEqual(first.tickets[1].soList, ['12', '13', '14', '51']);
+  assert.deepEqual(first.warnings, []);
+
+  const second = core.parseTelegramEnvelope({
+    text: 'nguoi 3 (700,700):\nb123 424 482 428 3n dd 10n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.deepEqual(second.tickets.map(t => t.loai), ['3Cang', 'XiuChu']);
+  assert.deepEqual(second.tickets[0].soList, ['123', '424', '482', '428']);
+  assert.deepEqual(second.warnings, []);
+});
+
+test('parse compact money/type tokens like 15ndd and dau1trieu', () => {
+  const splitMoneyType = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nb 17 69 15ndd 40n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.deepEqual(splitMoneyType.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
+  assert.deepEqual(splitMoneyType.tickets.map(t => t.tienDat), [15, 40]);
+  assert.deepEqual(splitMoneyType.warnings, []);
+
+  const millionStake = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n70dau1trieu',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.equal(millionStake.tickets.length, 1);
+  assert.equal(millionStake.tickets[0].loai, 'Dau');
+  assert.equal(millionStake.tickets[0].tienDat, 1000);
+  assert.deepEqual(millionStake.tickets[0].soList, ['70']);
+});
+
+test('parse glued stake/type/stake tokens like 30ndd40n', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nb 72 32 30ndd40n',
+    region: 'nam',
+    activeDai: ['Vung Tau'],
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
+  assert.deepEqual(parsed.tickets.map(t => t.tienDat), [30, 40]);
+  assert.deepEqual(parsed.tickets[1].soList, ['72', '32']);
+  assert.deepEqual(parsed.warnings, []);
+});
+
+test('parse phu as southern side stations excluding main station', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n2d phu 10 50 90b 50n dui 90 250n',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.dai), [
+    ['Bến Tre', 'Bạc Liêu'],
+    ['Bến Tre', 'Bạc Liêu'],
+  ]);
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', 'Duoi']);
+  assert.deepEqual(parsed.warnings, []);
+});
+
+test('trailing station aliases apply to already parsed tickets in the line', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n08 48 88b 40n dd 48 84 160n vt btr',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.dai), [
+    ['Vũng Tàu', 'Bến Tre'],
+    ['Vũng Tàu', 'Bến Tre'],
+  ]);
+  assert.deepEqual(parsed.tickets.map(t => t.xac), [3024000, 896000]);
+  assert.deepEqual(parsed.warnings, []);
+});
+
+test('plus-separated station aliases and trailing bli are treated as stations', () => {
+  const plus = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBlo -BT+ BL .72.100n..',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+  assert.deepEqual(plus.tickets[0].dai, ['Bến Tre', 'Bạc Liêu']);
+
+  const trailing = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBl 27 67 b 35n dui 90 300n bli',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+  assert.deepEqual(trailing.tickets.map(t => t.dai), [['Bạc Liêu'], ['Bạc Liêu']]);
+  assert.deepEqual(trailing.tickets.map(t => t.loai), ['Lo', 'Duoi']);
+});
+
+test('parse station-prefixed bet type and bl before station scope', () => {
+  const prefixedType = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nTpb.52.03.45.79.100nđđ60n.b.103.03.31.71.28.68.30nđđ30n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  assert.equal(prefixedType.warnings.length, 0);
+  assert.deepEqual(prefixedType.tickets[0].dai, ['TP.HCM']);
+  assert.deepEqual(prefixedType.tickets[0].loai, 'Lo');
+  assert.deepEqual(prefixedType.tickets[1].loai, 'DauDuoi');
+
+  const blBeforeDai = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBl TP+ĐT 52.03.100n..130.10n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  assert.equal(blBeforeDai.warnings.length, 0);
+  assert.deepEqual(blBeforeDai.tickets[0].dai, ['TP.HCM', 'Đồng Tháp']);
+  assert.deepEqual(blBeforeDai.tickets.map(t => t.loai), ['Lo', '3Cang']);
+});
+
+test('2d phu before parentheses scopes previous and parenthesized tickets', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n04 44 84b 75n dd 160n 2d phu (đầu 004den 904 60n dui 40n đai bli)',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', 'DauDuoi', 'XiuChuDau', 'XiuChuDuoi']);
+  assert.deepEqual(parsed.tickets[0].dai, ['Bến Tre', 'Bạc Liêu']);
+  assert.deepEqual(parsed.tickets[1].dai, ['Bến Tre', 'Bạc Liêu']);
+  assert.deepEqual(parsed.tickets[2].dai, ['Bạc Liêu']);
+  assert.deepEqual(parsed.tickets[3].dai, ['Bạc Liêu']);
+  assert.deepEqual(parsed.warnings, []);
+});
+
+test('ignore conversational filler and parse moi con stake phrases', () => {
+  const filler = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nghi cho anh con 23 24 5n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.equal(filler.tickets.length, 1);
+  assert.deepEqual(filler.tickets[0].soList, ['23', '24']);
+  assert.equal(filler.tickets[0].loai, 'Lo');
+  assert.equal(filler.tickets[0].tienDat, 5);
+  assert.deepEqual(filler.warnings, []);
+
+  const each = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n23 24 moi con 5 diem',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.equal(each.tickets.length, 1);
+  assert.equal(each.tickets[0].loai, 'Lo');
+  assert.equal(each.tickets[0].tienDat, 5);
+  assert.deepEqual(each.warnings, []);
+
+  const thousand = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nbao lo 52,25 moi con 10 ngan dau duoi 52,25 moi con 10 ngan',
+    region: 'bac',
+  });
+  assert.deepEqual(thousand.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
+  assert.deepEqual(thousand.tickets.map(t => t.tienDat), [10, 10]);
+  assert.deepEqual(thousand.warnings, []);
+});
+
+test('default ticket type follows number length when type is omitted', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n23 24 5n\n123 124 5n\n1234 1245 5n\n23b100',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', '3Cang', '4Cang', 'Lo']);
+  assert.deepEqual(parsed.tickets[3].soList, ['23']);
+  assert.equal(parsed.tickets[3].tienDat, 100);
+  assert.deepEqual(parsed.warnings, []);
+});
+
+test('parse station aliases without confusing bet type shortcuts', () => {
+  const nam = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nbl 07 47 10n\nbac lieu b 12 10n',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+  assert.equal(nam.tickets[0].loai, 'Lo');
+  assert.deepEqual(nam.tickets[0].dai, ['Vũng Tàu']);
+  assert.deepEqual(nam.tickets[1].dai, ['Bạc Liêu']);
+
+  const trung = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\ndac nong b 12 10n\ndak nong dd 34 20n',
+    region: 'trung',
+    date: new Date(2026, 4, 16),
+  });
+  assert.deepEqual(trung.tickets[0].dai, ['Đắk Nông']);
+  assert.deepEqual(trung.tickets[1].dai, ['Đắk Nông']);
+});
+
+test('parse multiple station aliases before a ticket', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\ncm,dt b 75 10n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.tickets[0].loai, 'Lo');
+  assert.deepEqual(parsed.tickets[0].soList, ['75']);
+  assert.deepEqual(parsed.tickets[0].dai, ['Cà Mau', 'Đồng Tháp']);
+  assert.equal(parsed.tickets[0].xac, 10 * 1 * 18 * 700 * 2);
+});
+
+test('warn and drop a whole line when it contains an inactive station', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\ncm,blieu b 75 10n\nbaclieu b 12 10n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+
+  assert.equal(parsed.tickets.length, 0);
+  assert.equal(parsed.warnings.some(w => w.includes('Bạc Liêu') && w.includes('cm,blieu b 75 10n')), true);
+  assert.equal(parsed.warnings.some(w => w.includes('Bạc Liêu') && w.includes('baclieu b 12 10n')), true);
+  assert.equal(parsed.warnings.some(w => w.includes('Vui lòng gửi lại tin mới đúng đài hôm nay')), true);
+});
+
+test('warn on unusual characters in ticket lines', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\ncm 🔥 b 75 10n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.warnings.some(w => w.includes('ký tự lạ') && w.includes('🔥')), true);
+});
+
+test('parse contextual headings and dau duoi phrase', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBlo - Tp\n.52.12.92.100n\nBlo - 3 dai\n53.150n 235.20n\nDau duoi 3 dai .918.981.235.30n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+
+  assert.equal(parsed.tickets.length, 4);
+  assert.deepEqual(parsed.tickets[0].dai, ['TP.HCM']);
+  assert.deepEqual(parsed.tickets[0].soList, ['52', '12', '92']);
+  assert.equal(parsed.tickets[1].loai, 'Lo');
+  assert.deepEqual(parsed.tickets[1].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+  assert.equal(parsed.tickets[2].loai, '3Cang');
+  assert.deepEqual(parsed.tickets[2].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+  assert.equal(parsed.tickets[3].loai, 'XiuChu');
+});
+
+test('ambiguous lines after contextual heading require explicit scope', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBlo - 3 dai\n53.150n\nBl 07.47.10n\nvt b 07.47.10n',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+  const activeDai = core.getActiveDai('nam', new Date(2026, 4, 12));
+
+  assert.deepEqual(parsed.tickets[0].dai, activeDai);
+  assert.deepEqual(parsed.tickets[1].dai, ['Vũng Tàu']);
+  assert.equal(parsed.warnings.some(w => w.includes('Bl 07.47.10n') && w.includes('chưa lưu')), true);
+});
+
+test('explicit scoped line closes copied heading context', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: [
+      'nguoi 1:',
+      'Blo - 3 dai',
+      '53.150n 235.20n',
+      'Dau duoi 3 dai .918.981.235.30n',
+      'Bl 07. 47. 10n. 70. 5n',
+      'B.00.01.22.93.83.92..10n, 22.48.848.422.292.612.652.592.622.401..5n, 92.89.98..3n, 392..2n, 351..1n. Dd.92.12..30n, 52..12n, 51.93.83.48.22.422.848.292..6n,',
+    ].join('\n'),
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+
+  assert.equal(parsed.warnings.some(w => w.includes('chưa lưu')), false);
+  assert.equal(parsed.tickets.some(t => t.sourceText === 'Bl 07. 47. 10n. 70. 5n' && t.soList.includes('70')), true);
+  assert.equal(parsed.tickets.some(t => t.sourceText.startsWith('B.00.01') && t.soList.includes('392')), true);
+});
+
+test('copied heading block skips unclear continuation lines', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: [
+      'nguoi 1:',
+      'Blo vt',
+      '.362.5n 79.60n',
+      'Dau duoi 362.62.200n',
+      'Blo -BT+ BL',
+      '.72.100n..',
+      'Blo - 3 dai-',
+      '.76.67.120n 32 100n.',
+      '867.10n',
+      'Dau duoi 67.76..70n',
+      '010.362.775.918.981.40n',
+    ].join('\n'),
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+
+  assert.equal(parsed.tickets.some(t => t.soList.includes('867')), false);
+  assert.equal(parsed.tickets.some(t => t.soList.includes('010')), false);
+  assert.equal(parsed.warnings.some(w => w.includes('867.10n') && w.includes('chưa lưu')), true);
+  assert.equal(parsed.warnings.some(w => w.includes('Dau duoi 67.76') && w.includes('chưa lưu')), true);
+  assert.equal(parsed.warnings.some(w => w.includes('010.362.775') && w.includes('chưa lưu')), true);
+});
+
+test('parse whole-line and parenthesized station scope', () => {
+  const lineWide = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n3dai.b.76.53.17.69.250n.dd150n.b.217.keo.den.917.5n.dd120n',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  assert.deepEqual(lineWide.tickets[0].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+  assert.deepEqual(lineWide.tickets[2].soList, ['217', '317', '417', '517', '617', '717', '817', '917']);
+  assert.equal(lineWide.tickets[3].loai, 'XiuChu');
+
+  const scoped = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBl 53 10n ( 3 dai ).\nDd 53 60n ( 1 dai )',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  assert.deepEqual(scoped.tickets[0].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+  assert.deepEqual(scoped.tickets[1].dai, ['TP.HCM']);
+
+  const inline = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n70dau1trieu.200...22.67b100..(22.67b100.3dai)',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  assert.equal(inline.tickets[0].loai, 'Dau');
+  assert.equal(inline.tickets[0].tienDat, 1200);
+  assert.deepEqual(inline.tickets[0].dai, ['TP.HCM']);
+  assert.deepEqual(inline.tickets[1].dai, ['TP.HCM']);
+  assert.deepEqual(inline.tickets[2].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+
+  for (const marker of ['3đ', '3 đ', '3đài', '3 đài', '3₫ai']) {
+    const endMarker = core.parseTelegramEnvelope({
+      text: `nguoi 1:\n23b100.${marker}`,
+      region: 'nam',
+      date: new Date(2026, 4, 11),
+    });
+    assert.equal(endMarker.tickets[0].tienDat, 100);
+    assert.deepEqual(endMarker.tickets[0].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+  }
+});
+
+test('parse keo ranges with filler words', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n123 keo luon nha 923 b 5n\n101 den 109 dd 10n\n02 keo 92 b 1n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+
+  assert.deepEqual(parsed.tickets[0].soList, ['123', '223', '323', '423', '523', '623', '723', '823', '923']);
+  assert.deepEqual(parsed.tickets[1].soList, ['101', '102', '103', '104', '105', '106', '107', '108', '109']);
+  assert.deepEqual(parsed.tickets[2].soList, ['02', '12', '22', '32', '42', '52', '62', '72', '82', '92']);
+});
+
+test('parse dd with two stakes as dau and duoi stakes', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\ndd 19 80 60 10d 20d',
+    region: 'nam',
+    activeDai: ['TP.HCM', 'Dong Thap', 'Ca Mau'],
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Dau', 'Duoi']);
+  assert.deepEqual(parsed.tickets.map(t => t.tienDat), [10, 20]);
+  assert.deepEqual(parsed.tickets[0].soList, ['19', '80', '60']);
+});
+
+test('parse duplicated dd stake as one dau-duoi ticket', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n65 25 57 Dd 100n 100n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.tickets[0].loai, 'DauDuoi');
+  assert.equal(parsed.tickets[0].tienDat, 100);
+  assert.deepEqual(parsed.tickets[0].soList, ['65', '25', '57']);
+});
+
+test('suffix dd stake does not change next pulled group type', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nb 217 keo den 917 5n dd120n 276 keo den 976 5n dd120n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['3Cang', 'XiuChu', '3Cang', 'XiuChu']);
+  assert.deepEqual(parsed.tickets.map(t => t.tienDat), [5, 120, 5, 120]);
+  assert.deepEqual(parsed.tickets[2].soList, ['276', '376', '476', '576', '676', '776', '876', '976']);
+});
+
+test('bare xc stake before dd and ending 3d marker are not treated as numbers', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n15 47b 75n 315 347 215 247b 6n xc 35 dd 15 180n 47 120n 3d',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', '3Cang', 'XiuChu', 'DauDuoi', 'DauDuoi']);
+  assert.deepEqual(parsed.tickets[2].soList, ['315', '347', '215', '247']);
+  assert.equal(parsed.tickets[2].tienDat, 35);
+  assert.deepEqual(parsed.tickets[3].soList, ['15']);
+  assert.deepEqual(parsed.tickets[4].soList, ['47']);
+  assert.equal(parsed.tickets.some(t => t.loai === 'Duoi' && t.tienDat === 3), false);
+});
+
+test('ending 3d marker applies to emitted line tickets without becoming dd stake', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n18 81b 30n dd 60n 14 41b 40n dd 14 120n 41 30n 3d',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  const activeDai = core.getActiveDai('nam', new Date(2026, 4, 11));
+
+  assert.deepEqual(parsed.tickets.map(t => t.dai), parsed.tickets.map(() => activeDai));
+  assert.equal(parsed.tickets.some(t => t.loai === 'Duoi' && t.tienDat === 3), false);
+});
+
+test('southern default uses main station for that weekday', () => {
+  const date = new Date(2026, 4, 12);
+  const activeDai = core.getActiveDai('nam', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nb 12 10n',
+    region: 'nam',
+    date,
+  });
+
+  assert.deepEqual(parsed.activeDai, activeDai);
+  assert.deepEqual(parsed.defaultDai, [activeDai[1]]);
+  assert.deepEqual(parsed.tickets[0].dai, [activeDai[1]]);
+  assert.equal(parsed.tickets[0].xac, 10 * 1 * 18 * 700);
+});
+
+test('southern main station follows configured weekday table', () => {
+  const cases = [
+    [new Date(2026, 4, 11), 'TP.HCM'],
+    [new Date(2026, 4, 12), 'Vũng Tàu'],
+    [new Date(2026, 4, 13), 'Đồng Nai'],
+    [new Date(2026, 4, 14), 'Tây Ninh'],
+    [new Date(2026, 4, 15), 'Bình Dương'],
+    [new Date(2026, 4, 16), 'TP.HCM'],
+    [new Date(2026, 4, 17), 'Tiền Giang'],
+  ];
+
+  for (const [date, expected] of cases) {
+    assert.equal(core.getMainDai('nam', date), expected);
+  }
+});
+
+test('southern explicit multi-station marker uses all active day stations', () => {
+  const date = new Date(2026, 4, 11);
+  const activeDai = core.getActiveDai('nam', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n3dai b 12 10n',
+    region: 'nam',
+    date,
+  });
+
+  assert.deepEqual(parsed.tickets[0].dai, activeDai);
+  assert.equal(parsed.tickets[0].xac, 10 * 1 * 18 * 700 * activeDai.length);
+});
+
+test('southern explicit station overrides main station', () => {
+  const date = new Date(2026, 4, 13);
+  const activeDai = core.getActiveDai('nam', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nct b 12 10n',
+    region: 'nam',
+    date,
+  });
+
+  assert.deepEqual(parsed.activeDai, activeDai);
+  assert.deepEqual(parsed.tickets[0].dai, [activeDai[1]]);
+});
+
+test('central default uses every station for that weekday', () => {
+  const date = new Date(2026, 4, 11);
+  const activeDai = core.getActiveDai('trung', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nb 12 10n',
+    region: 'trung',
+    date,
+  });
+
+  assert.deepEqual(parsed.defaultDai, activeDai);
+  assert.deepEqual(parsed.tickets[0].dai, activeDai);
+  assert.equal(parsed.tickets[0].xac, 10 * 1 * 18 * 700 * activeDai.length);
+});
+
+test('central explicit station narrows the station list', () => {
+  const date = new Date(2026, 4, 11);
+  const activeDai = core.getActiveDai('trung', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nhue b 12 10n',
+    region: 'trung',
+    date,
+  });
+
+  assert.deepEqual(parsed.tickets[0].dai, [activeDai[0]]);
+});
+
+test('check southern tickets against draw results', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\n61 68b 75n dd 280n 061 068b 10n xc 75n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  const checked = core.checkTickets(
+    parsed.tickets,
+    {
+      'TP.HCM': {
+        db: ['123468'],
+        g1: ['11111'],
+        g2: ['22222'],
+        g3: ['33333', '44444'],
+        g4: ['55555', '66666', '77777', '88888', '99999', '10000', '10001'],
+        g5: ['0000'],
+        g6: ['1111', '2222', '3333'],
+        g7: ['061'],
+        g8: ['61'],
+      },
+    },
+    { region: 'nam', activeDai: ['TP.HCM'] },
+  );
+
+  const lo = checked.find(t => t.loai === 'Lo');
+  const dd = checked.find(t => t.loai === 'DauDuoi');
+  const xc = checked.find(t => t.loai === 'XiuChu');
+  assert.equal(lo.ketQua, 'TRÚNG');
+  assert.equal(lo.hits.length, 3);
+  assert.equal(lo.tienThang, 75 * 70000 * 3);
+  assert.equal(dd.ketQua, 'TRÚNG');
+  assert.equal(dd.hits.length, 2);
+  assert.equal(xc.ketQua, 'TRÚNG');
+});
+
+test('check multi-station tickets only against their own station results', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nvt b 39 10n\nbentre b 12 10n',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+  const checked = core.checkTickets(
+    parsed.tickets,
+    {
+      'Bến Tre': {
+        db: ['123412'],
+        g1: ['11111'],
+        g2: ['22222'],
+        g3: ['33333', '44444'],
+        g4: ['55555', '66666', '77777', '88888', '99999', '10000', '10001'],
+        g5: ['0000'],
+        g6: ['1111', '2222', '3333'],
+        g7: ['061'],
+        g8: ['00'],
+      },
+      'Vũng Tàu': {
+        db: ['123400'],
+        g1: ['11111'],
+        g2: ['22222'],
+        g3: ['33333', '44444'],
+        g4: ['55555', '66666', '77777', '88888', '99999', '10000', '10001'],
+        g5: ['0000'],
+        g6: ['1111', '2222', '3333'],
+        g7: ['061'],
+        g8: ['39'],
+      },
+    },
+    { region: 'nam', activeDai: ['Bến Tre', 'Vũng Tàu'] },
+  );
+
+  const vt = checked.find(t => t.dai.includes('Vũng Tàu'));
+  const bt = checked.find(t => t.dai.includes('Bến Tre'));
+  assert.equal(vt.ketQua, 'TRÚNG');
+  assert.equal(vt.hits.every(hit => hit.dai === 'Vũng Tàu'), true);
+  assert.equal(bt.ketQua, 'TRÚNG');
+  assert.equal(bt.hits.every(hit => hit.dai === 'Bến Tre'), true);
+});
+
+test('parse and check northern xien ticket', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 2:\nxien2 12 34 10n',
+    region: 'bac',
+    activeDai: ['Miền Bắc'],
+  });
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.tickets[0].loai, 'Xien2');
+
+  const checked = core.checkTickets(
+    parsed.tickets,
+    {
+      'Miền Bắc': {
+        db: ['12345'],
+        g1: ['11112'],
+        g2: ['22234', '33333'],
+        g3: ['44444', '55555', '66666', '77777', '88888', '99999'],
+        g4: ['0000', '1111', '2222', '3333'],
+        g5: ['4444', '5555', '6666', '7777', '8888', '9999'],
+        g6: ['123', '456', '789'],
+        g7: ['01', '02', '03', '04'],
+      },
+    },
+    { region: 'bac', activeDai: ['Miền Bắc'] },
+  );
+  assert.equal(checked[0].ketQua, 'TRÚNG');
+  assert.equal(checked[0].tienThang, 10 * 10000);
+});
+
+test('parse draw result text for single station', () => {
+  const draw = core.parseDrawResultText(
+    [
+      'Đặc biệt 123456',
+      'Giải nhất 11111',
+      'Giải nhì 22222',
+      'Giải ba 33333 44444',
+      'Giải tư 55555 66666 77777 88888 99999 10061 10068',
+      'Giải năm 0000',
+      'Giải sáu 1111 2222 3333',
+      'Giải bảy 061',
+      'Giải tám 61',
+    ].join('\n'),
+    'nam',
+  );
+  assert.deepEqual(draw.activeDai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
+  assert.equal(draw.results['TP.HCM'].db[0], '123456');
+  assert.equal(draw.results['TP.HCM'].g8[0], '61');
+});
+
+test('format report and split Telegram messages', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\n61b 10n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  const checked = core.checkTickets(parsed.tickets, { 'TP.HCM': { db: ['123461'], g8: ['00'] } }, { region: 'nam', activeDai: ['TP.HCM'] });
+  const summary = core.summarizeTickets(checked)[0];
+  const report = core.formatPlayerReport(summary);
+  assert.match(report, /KẾT QUẢ - người 1/);
+  assert.match(report, /Xác:/);
+  assert.match(report, /Thắng:/);
+  assert.match(report, /Lãi\/lỗ:/);
+  assert.equal(report.includes('STT |'), false);
+  assert.equal(core.splitTelegramMessages(report, 40).length > 1, true);
+});
