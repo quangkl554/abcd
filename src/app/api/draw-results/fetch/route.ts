@@ -3,6 +3,7 @@ import { authErrorResponse, requireActiveUser } from '@/lib/auth';
 import { jsonError, jsonOk } from '@/lib/http';
 import { drawRequestSchema } from '@/lib/validation';
 import { getConfig, parseDrawResultText, type Region } from '@/lib/core';
+import { resultSourceUrl } from '@/lib/result-sources';
 
 export const runtime = 'nodejs';
 
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     const { supabase, user } = await requireActiveUser();
     const input = drawRequestSchema.parse(await request.json());
     const region = input.region as Region;
-    const url = process.env[`RESULT_SOURCE_URL_${region.toUpperCase()}`];
+    const url = resultSourceUrl(region);
     if (!url) return jsonOk({ needsManual: true, reason: 'Chua cau hinh URL ket qua.' });
 
     const response = await fetch(url, { cache: 'no-store' });

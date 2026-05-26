@@ -1,8 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Calculator, CheckCircle2, Download, LogOut, Plus, RefreshCw, Save, Send, Settings, UserRound, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import {
+  AlertTriangle,
+  Calculator,
+  CheckCircle2,
+  Edit3,
+  ListChecks,
+  Plus,
+  RefreshCw,
+  Save,
+  Send,
+  Trash2,
+  UserRound,
+  XCircle,
+} from 'lucide-react';
+import { AppHeader } from './app-header';
 
 type Region = 'nam' | 'trung' | 'bac';
 
@@ -15,6 +29,7 @@ type Player = {
 
 type Ticket = {
   id: string;
+  ticket_message_id: string;
   player_name: string;
   dai: string[];
   loai: string;
@@ -37,13 +52,6 @@ type ParseIssue = {
   source_text: string | null;
 };
 
-type DrawResult = {
-  id: string;
-  dai: string;
-  source: string;
-  prizes: Record<string, string[]>;
-};
-
 type Workspace = {
   profile: { username: string; role: 'admin' | 'user' };
   config: {
@@ -54,19 +62,32 @@ type Workspace = {
     heSoXacDefault: Record<string, number>;
     tyLeDefault: Record<string, number>;
     activeDai: string[];
+    resultSourceUrl: string;
   };
   players: Player[];
   tickets: Ticket[];
   issues: ParseIssue[];
-  drawResults: DrawResult[];
+  drawResults: Array<{ id: string; dai: string; source: string; prizes: Record<string, string[]> }>;
   summary: Array<{ playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
 };
 
-const REGIONS: Array<{ id: Region; label: string }> = [
-  { id: 'nam', label: 'Miền Nam' },
-  { id: 'trung', label: 'Miền Trung' },
-  { id: 'bac', label: 'Miền Bắc' },
+const REGIONS: Array<{ id: Region; label: string; short: string }> = [
+  { id: 'nam', label: 'Miền Nam', short: 'Nam' },
+  { id: 'trung', label: 'Miền Trung', short: 'Trung' },
+  { id: 'bac', label: 'Miền Bắc', short: 'Bắc' },
 ];
+
+const RATE_LABELS: Record<string, string> = {
+  Lo: 'Lô',
+  Dau: 'Đầu',
+  Duoi: 'Đuôi',
+  DauDuoi: 'Đầu đuôi',
+  XiuChu: 'Xỉu chủ',
+  XiuChuDau: 'Xỉu chủ đầu',
+  XiuChuDuoi: 'Xỉu chủ đuôi',
+  '3Cang': '3 càng',
+  '4Cang': '4 càng',
+};
 
 export function Dashboard() {
   const [date, setDate] = useState(todayKey());
@@ -75,8 +96,9 @@ export function Dashboard() {
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [ticketText, setTicketText] = useState('');
-  const [manualKq, setManualKq] = useState('');
   const [issueDrafts, setIssueDrafts] = useState<Record<string, string>>({});
+  const [editingMessageId, setEditingMessageId] = useState('');
+  const [editingText, setEditingText] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -90,7 +112,6 @@ export function Dashboard() {
       win: tickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
     };
   }, [workspace]);
-
   const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
 
   useEffect(() => {
@@ -103,7 +124,7 @@ export function Dashboard() {
     const response = await fetch(`/api/workspace?date=${date}&region=${region}`, { cache: 'no-store' });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
-      setError(payload.error || 'Khong tai du lieu duoc.');
+      setError(payload.error || 'Không tải được dữ liệu.');
       return;
     }
     setWorkspace(payload as Workspace);
@@ -165,27 +186,27 @@ export function Dashboard() {
     await loadWorkspace();
   }
 
-  async function fetchDraw() {
-    setNotice('');
-    setError('');
-    startTransition(async () => {
-      const response = await apiPost('/api/draw-results/fetch', { date, region });
-      if (!response.ok) return setError(response.error);
-      if (response.needsManual) {
-        setNotice(`${response.reason} Hãy dán kết quả vào ô nhập tay.`);
-      } else {
-        setNotice('Đã tải và lưu kết quả từ URL.');
-        await loadWorkspace();
-      }
-    });
+  function startEdit(ticket: Ticket) {
+    setEditingMessageId(ticket.ticket_message_id);
+    setEditingText(ticket.source_text || '');
   }
 
-  async function saveManualDraw() {
-    if (!manualKq.trim()) return setError('Chưa có nội dung kết quả để lưu.');
-    const response = await apiPost('/api/draw-results/manual', { date, region, text: manualKq });
+  async function saveEditedMessage() {
+    if (!editingMessageId || !editingText.trim()) return setError('Tin sửa không được trống.');
+    const response = await apiPost(`/api/ticket-messages/${editingMessageId}/reparse`, { correctedText: editingText });
     if (!response.ok) return setError(response.error);
-    setManualKq('');
-    setNotice('Đã lưu kết quả thủ công.');
+    setNotice(response.issues?.length ? 'Đã sửa tin, vẫn còn cảnh báo cần xử lý.' : 'Đã sửa tin và cập nhật bảng vé.');
+    setEditingMessageId('');
+    setEditingText('');
+    await loadWorkspace();
+  }
+
+  async function deleteMessage(ticket: Ticket) {
+    const ok = window.confirm('Xóa tin gốc này sẽ xóa toàn bộ vé được sinh ra từ tin đó. Bạn chắc chắn muốn xóa?');
+    if (!ok) return;
+    const response = await apiDelete(`/api/ticket-messages/${ticket.ticket_message_id}`);
+    if (!response.ok) return setError(response.error);
+    setNotice('Đã xóa tin và các vé liên quan.');
     await loadWorkspace();
   }
 
@@ -200,103 +221,81 @@ export function Dashboard() {
     });
   }
 
-  async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
+  async function resetData(scope: 'day-region' | 'all') {
+    const label = scope === 'all' ? 'toàn bộ dữ liệu của tài khoản này' : `dữ liệu ngày ${date} - ${regionName(region)}`;
+    const confirmText = window.prompt(`Nhập chính xác XOA TAT CA để xóa ${label}. Thao tác này không hoàn tác.`);
+    if (confirmText !== 'XOA TAT CA') return;
+    const body = scope === 'all'
+      ? { scope, confirm: confirmText }
+      : { scope, confirm: confirmText, date, region };
+    const response = await apiDelete('/api/workspace/reset', body);
+    if (!response.ok) return setError(response.error);
+    setNotice(scope === 'all' ? 'Đã xóa toàn bộ dữ liệu của tài khoản.' : 'Đã xóa dữ liệu ngày/miền hiện tại.');
+    await loadWorkspace();
   }
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">XS</div>
-          <div>
-            <div>Xoso Web</div>
-            <div className="muted" style={{ fontSize: 12 }}>Nhập tin, sửa lỗi, dò kết quả</div>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <span className="badge"><UserRound size={14} /> {workspace?.profile?.username || 'user'}</span>
-          {workspace?.profile?.role === 'admin' ? <Link className="btn" href="/admin"><Settings size={17} /> Admin</Link> : null}
-          <button className="btn icon" type="button" title="Đăng xuất" onClick={logout}><LogOut size={18} /></button>
-        </div>
-      </header>
+      <AppHeader username={workspace?.profile?.username} role={workspace?.profile?.role} activePage="tickets" />
 
       <div className="workspace">
         <div className="main-flow">
-          <section className="section">
-            <div className="controls">
-              <input className="input" type="date" value={date} onChange={event => setDate(event.target.value)} />
-              <div className="segmented">
-                {REGIONS.map(item => (
-                  <button key={item.id} type="button" className={`segment ${region === item.id ? 'active' : ''}`} onClick={() => setRegion(item.id)}>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <div className="row">
-                <button className="btn" type="button" onClick={loadWorkspace}><RefreshCw size={17} /> Tải lại</button>
-                <button className="btn green" type="button" onClick={checkAll} disabled={pending}><Calculator size={17} /> Dò kết quả</button>
-              </div>
+          <section className="control-panel">
+            <div className="date-control">
+              <span>Ngày làm việc</span>
+              <input type="date" value={date} onChange={event => setDate(event.target.value)} />
+            </div>
+            <div className="region-control" role="tablist" aria-label="Chọn miền">
+              {REGIONS.map(item => (
+                <button key={item.id} type="button" className={`region-tab ${region === item.id ? 'active' : ''}`} onClick={() => setRegion(item.id)}>
+                  <span>{item.short}</span>
+                  <small>{item.label}</small>
+                </button>
+              ))}
+            </div>
+            <div className="control-actions">
+              <button className="btn soft" type="button" onClick={loadWorkspace}><RefreshCw size={17} /> Tải lại</button>
+              <Link className="btn soft" href="/results"><ListChecks size={17} /> Trang KQ</Link>
+              <button className="btn green" type="button" onClick={checkAll} disabled={pending}><Calculator size={17} /> Dò vé</button>
             </div>
           </section>
 
           {notice ? <div className="notice">{notice}</div> : null}
           {error ? <div className="error">{error}</div> : null}
 
-          <section className="section">
-            <div className="summary-grid">
-              <div className="metric"><span>Vé trong ngày</span><strong>{totals.tickets}</strong></div>
-              <div className="metric"><span>Tổng xác</span><strong>{money(totals.xac)}</strong></div>
-              <div className="metric"><span>Tổng thắng</span><strong>{money(totals.win)}</strong></div>
-              <div className="metric"><span>Lãi lỗ</span><strong>{money(totals.win - totals.xac)}</strong></div>
-            </div>
+          <section className="summary-grid">
+            <div className="metric"><span>Vé trong ngày</span><strong>{totals.tickets}</strong></div>
+            <div className="metric"><span>Tổng xác</span><strong>{money(totals.xac)}</strong></div>
+            <div className="metric"><span>Tổng thắng</span><strong>{money(totals.win)}</strong></div>
+            <div className="metric"><span>Lãi lỗ</span><strong className={totals.win - totals.xac >= 0 ? 'positive' : 'negative'}>{money(totals.win - totals.xac)}</strong></div>
           </section>
 
-          <section className="section">
+          <section className="section input-section">
             <div className="section-header">
-              <h2 className="section-title"><Send size={18} /> Nhập tin</h2>
-              <span className="muted">{workspace?.config.regionName} - Đài hôm nay: {workspace?.config.activeDai.join(', ')}</span>
+              <div>
+                <h2 className="section-title"><Send size={18} /> Nhập tin</h2>
+                <p className="section-note">{workspace?.config.regionName} - Đài hôm nay: {workspace?.config.activeDai.join(', ') || 'chưa có'}</p>
+              </div>
+              <span className="badge neutral">{activeIssues.length} tin cần sửa</span>
             </div>
             <form className="form-grid" onSubmit={submitTicket}>
               <div className="row">
-                <select className="select" value={selectedPlayerId} onChange={event => setSelectedPlayerId(event.target.value)} style={{ maxWidth: 260 }}>
+                <select className="select compact" value={selectedPlayerId} onChange={event => setSelectedPlayerId(event.target.value)}>
                   <option value="">Tự nhận khách từ tin</option>
                   {workspace?.players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}
                 </select>
                 <button className="btn primary" type="submit" disabled={pending || !ticketText.trim()}><Plus size={17} /> Thêm tin</button>
               </div>
-              <textarea className="textarea" value={ticketText} onChange={event => setTicketText(event.target.value)} placeholder="Ví dụ: nguoi 1&#10;b 12 10n dd 20n" />
+              <textarea className="textarea ticket-input" value={ticketText} onChange={event => setTicketText(event.target.value)} placeholder={'Ví dụ:\nnguoi 1\nb 12 10n dd 20n'} />
             </form>
           </section>
 
           <section className="section">
             <div className="section-header">
-              <h2 className="section-title"><Download size={18} /> Kết quả xổ số</h2>
-              <div className="row">
-                <button className="btn" type="button" onClick={fetchDraw} disabled={pending}><Download size={17} /> Tải URL</button>
-                <button className="btn primary" type="button" onClick={saveManualDraw}><Save size={17} /> Lưu dán tay</button>
+              <div>
+                <h2 className="section-title"><CheckCircle2 size={18} /> Bảng vé</h2>
+                <p className="section-note">Có thể sửa lại tin gốc hoặc xóa cả tin nếu nhập nhầm.</p>
               </div>
-            </div>
-            <textarea className="textarea" value={manualKq} onChange={event => setManualKq(event.target.value)} placeholder="Dán kết quả nếu URL chưa nhận ra được..." />
-            <div className="draw-grid" style={{ marginTop: 10 }}>
-              {(workspace?.drawResults || []).map(draw => (
-                <div className="draw-station" key={draw.id}>
-                  <h3>{draw.dai}</h3>
-                  <div className="muted" style={{ fontSize: 12 }}>Nguồn: {draw.source}</div>
-                  <div style={{ marginTop: 8, fontSize: 13 }}>
-                    {Object.entries(draw.prizes).map(([key, values]) => (
-                      <div key={key}><b>{key}</b>: {values.join(', ')}</div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="section">
-            <div className="section-header">
-              <h2 className="section-title"><CheckCircle2 size={18} /> Bảng vé</h2>
               <span className="muted">{workspace?.tickets.length || 0} dòng</span>
             </div>
             <div className="table-wrap">
@@ -312,24 +311,29 @@ export function Dashboard() {
                     <th>KQ</th>
                     <th>Thắng</th>
                     <th>Tin gốc</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {(workspace?.tickets || []).map(ticket => (
-                    <tr key={ticket.id}>
-                      <td>{ticket.player_name}</td>
-                      <td>{ticket.dai.join(', ')}</td>
-                      <td><b>{ticket.so_list.join(' · ')}</b></td>
-                      <td><span className="badge">{ticket.loai_label || ticket.loai}</span></td>
-                      <td>{ticket.tien_dat}</td>
-                      <td>{money(ticket.xac)}</td>
-                      <td><StatusBadge status={ticket.status} /></td>
-                      <td>{ticket.tien_thang ? money(ticket.tien_thang) : ''}</td>
-                      <td className="muted">{ticket.source_text}</td>
-                    </tr>
+                    <TableRows
+                      key={ticket.id}
+                      ticket={ticket}
+                      editingMessageId={editingMessageId}
+                      editingText={editingText}
+                      setEditingText={setEditingText}
+                      startEdit={startEdit}
+                      cancelEdit={() => {
+                        setEditingMessageId('');
+                        setEditingText('');
+                      }}
+                      saveEditedMessage={saveEditedMessage}
+                      deleteMessage={deleteMessage}
+                    />
                   ))}
                 </tbody>
               </table>
+              {!workspace?.tickets.length ? <div className="empty-state">Chưa có vé trong ngày/miền này.</div> : null}
             </div>
           </section>
         </div>
@@ -349,20 +353,19 @@ export function Dashboard() {
                   </div>
                   <div className="issue-warning">{issue.warning}</div>
                   <textarea
-                    className="textarea"
-                    style={{ minHeight: 86 }}
+                    className="textarea small"
                     value={issueDrafts[issue.id] ?? issue.source_text ?? ''}
                     disabled={issue.status !== 'open'}
                     onChange={event => setIssueDrafts(current => ({ ...current, [issue.id]: event.target.value }))}
                   />
                   {issue.status === 'open' ? (
-                    <div className="row" style={{ marginTop: 8 }}>
+                    <div className="row action-row">
                       <button className="btn primary" type="button" onClick={() => reparseIssue(issue)}><RefreshCw size={16} /> Parse lại</button>
-                      <button className="btn" type="button" onClick={() => ignoreIssue(issue)}><XCircle size={16} /> Bỏ qua</button>
+                      <button className="btn soft" type="button" onClick={() => ignoreIssue(issue)}><XCircle size={16} /> Bỏ qua</button>
                     </div>
                   ) : null}
                 </div>
-              )) : <div className="muted">Không có tin lỗi.</div>}
+              )) : <div className="empty-state compact">Không có tin lỗi.</div>}
             </div>
           </section>
 
@@ -376,11 +379,69 @@ export function Dashboard() {
             </form>
             {activePlayer && workspace ? (
               <RatesEditor player={activePlayer} config={workspace.config} onSave={saveRates} />
-            ) : <div className="muted" style={{ marginTop: 10 }}>Chọn hoặc thêm khách để chỉnh hệ số.</div>}
+            ) : <div className="empty-state compact">Chọn hoặc thêm khách để chỉnh hệ số.</div>}
+          </section>
+
+          <section className="section danger-zone">
+            <div className="section-header">
+              <h2 className="section-title"><Trash2 size={18} /> Xóa dữ liệu</h2>
+            </div>
+            <p className="section-note">Các nút này yêu cầu nhập đúng cụm <b>XOA TAT CA</b> trước khi xóa.</p>
+            <div className="form-grid">
+              <button className="btn amber" type="button" onClick={() => resetData('day-region')}><Trash2 size={16} /> Xóa ngày/miền này</button>
+              <button className="btn red" type="button" onClick={() => resetData('all')}><Trash2 size={16} /> Xóa tất cả dữ liệu</button>
+            </div>
           </section>
         </aside>
       </div>
     </main>
+  );
+}
+
+function TableRows(props: {
+  ticket: Ticket;
+  editingMessageId: string;
+  editingText: string;
+  setEditingText: (value: string) => void;
+  startEdit: (ticket: Ticket) => void;
+  cancelEdit: () => void;
+  saveEditedMessage: () => void;
+  deleteMessage: (ticket: Ticket) => void;
+}) {
+  const isEditing = props.editingMessageId === props.ticket.ticket_message_id;
+  return (
+    <>
+      <tr>
+        <td>{props.ticket.player_name}</td>
+        <td>{props.ticket.dai.join(', ')}</td>
+        <td><b>{props.ticket.so_list.join(' · ')}</b></td>
+        <td><span className="badge neutral">{props.ticket.loai_label || props.ticket.loai}</span></td>
+        <td>{props.ticket.tien_dat}</td>
+        <td>{money(props.ticket.xac)}</td>
+        <td><StatusBadge status={props.ticket.status} /></td>
+        <td>{props.ticket.tien_thang ? money(props.ticket.tien_thang) : ''}</td>
+        <td className="source-cell">{props.ticket.source_text}</td>
+        <td>
+          <div className="table-actions">
+            <button className="btn icon soft" type="button" title="Sửa tin" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
+            <button className="btn icon danger-soft" type="button" title="Xóa tin" onClick={() => props.deleteMessage(props.ticket)}><Trash2 size={16} /></button>
+          </div>
+        </td>
+      </tr>
+      {isEditing ? (
+        <tr className="edit-row">
+          <td colSpan={10}>
+            <div className="inline-editor">
+              <textarea className="textarea small" value={props.editingText} onChange={event => props.setEditingText(event.target.value)} />
+              <div className="row action-row">
+                <button className="btn primary" type="button" onClick={props.saveEditedMessage}><Save size={16} /> Lưu sửa</button>
+                <button className="btn soft" type="button" onClick={props.cancelEdit}>Hủy</button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
@@ -390,24 +451,34 @@ function RatesEditor({ player, config, onSave }: { player: Player; config: Works
   const [tyLe, setTyLe] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    setHeSoXac({ ...config.heSoXacDefault, ...(player.rate_profile?.heSoXac || {}) });
-    setTyLe({ ...config.tyLeDefault, ...(player.rate_profile?.tyLe || {}) });
+    setHeSoXac(toDisplayRates({ ...config.heSoXacDefault, ...(player.rate_profile?.heSoXac || {}) }));
+    setTyLe(toDisplayRates({ ...config.tyLeDefault, ...(player.rate_profile?.tyLe || {}) }));
   }, [player.id, config, player.rate_profile]);
 
+  function save() {
+    onSave({
+      heSoXac: fromDisplayRates(heSoXac),
+      tyLe: fromDisplayRates(tyLe),
+    });
+  }
+
   return (
-    <div className="form-grid" style={{ marginTop: 12 }}>
-      <div className="muted" style={{ fontWeight: 700 }}>{player.name}</div>
+    <div className="form-grid rates-panel">
+      <div>
+        <div className="muted strong">{player.name}</div>
+        <div className="mini-note">Giao diện rút gọn 1 số 0, hệ thống vẫn tính theo số gốc.</div>
+      </div>
       <div className="rate-grid header">
-        <span>Loại</span><span>Hệ số</span><span>Tỉ lệ</span>
+        <span>Loại</span><span>Hệ số</span><span>Trúng</span>
       </div>
       {keys.map(key => (
         <div className="rate-grid" key={key}>
-          <span>{key}</span>
-          <input className="input" type="number" value={heSoXac[key] || ''} onChange={event => setHeSoXac(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
-          <input className="input" type="number" value={tyLe[key] || ''} onChange={event => setTyLe(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
+          <span>{RATE_LABELS[key] || key}</span>
+          <input className="input" type="number" value={heSoXac[key] ?? ''} onChange={event => setHeSoXac(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
+          <input className="input" type="number" value={tyLe[key] ?? ''} onChange={event => setTyLe(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
         </div>
       ))}
-      <button className="btn primary" type="button" onClick={() => onSave({ heSoXac, tyLe })}><Save size={17} /> Lưu hệ số</button>
+      <button className="btn primary" type="button" onClick={save}><Save size={17} /> Lưu hệ số</button>
     </div>
   );
 }
@@ -416,7 +487,7 @@ function StatusBadge({ status }: { status: string }) {
   if (status === 'TRUNG') return <span className="badge win">TRÚNG</span>;
   if (status === 'Truot') return <span className="badge loss">Trượt</span>;
   if (status === 'Chua co KQ') return <span className="badge warn">Chưa có KQ</span>;
-  return <span className="badge">?</span>;
+  return <span className="badge neutral">?</span>;
 }
 
 async function apiPost(url: string, body: unknown) {
@@ -439,6 +510,24 @@ async function apiPatch(url: string, body: unknown) {
   return { ok: response.ok && payload.ok, ...payload };
 }
 
+async function apiDelete(url: string, body?: unknown) {
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json();
+  return { ok: response.ok && payload.ok, ...payload };
+}
+
+function toDisplayRates(values: Record<string, number>) {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Number(value || 0) / 10]));
+}
+
+function fromDisplayRates(values: Record<string, number>) {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Math.round(Number(value || 0) * 10)]));
+}
+
 function money(value: number) {
   return Number(value || 0).toLocaleString('vi-VN');
 }
@@ -447,4 +536,8 @@ function todayKey() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function regionName(region: Region) {
+  return REGIONS.find(item => item.id === region)?.label || region;
 }
