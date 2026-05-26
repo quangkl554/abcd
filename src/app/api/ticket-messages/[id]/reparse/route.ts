@@ -16,6 +16,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       ownerId: user.id,
       messageId: id,
       correctedText: input.correctedText,
+      issueId: input.issueId,
+      mode: input.mode,
     });
     return jsonOk(result);
   } catch (error) {

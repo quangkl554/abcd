@@ -78,6 +78,8 @@ export async function reparseTicketMessage(args: {
   ownerId: string;
   messageId: string;
   correctedText: string;
+  issueId?: string;
+  mode?: 'append' | 'replace';
 }) {
   const { data: message, error: findError } = await args.supabase
     .from('ticket_messages')
@@ -100,24 +102,34 @@ export async function reparseTicketMessage(args: {
   const player = playerName ? await upsertPlayer(args.supabase, args.ownerId, playerName, selectedPlayer?.rate_profile) : selectedPlayer;
   const playerId = player?.id || selectedPlayer?.id || null;
 
-  const { error: deleteTicketsError } = await args.supabase
-    .from('tickets')
-    .delete()
-    .eq('owner_id', args.ownerId)
-    .eq('ticket_message_id', args.messageId);
-  if (deleteTicketsError) throw deleteTicketsError;
+  const mode = args.mode || 'append';
+  if (mode === 'replace') {
+    const { error: deleteTicketsError } = await args.supabase
+      .from('tickets')
+      .delete()
+      .eq('owner_id', args.ownerId)
+      .eq('ticket_message_id', args.messageId);
+    if (deleteTicketsError) throw deleteTicketsError;
+  }
 
-  await args.supabase
+  let issueUpdate = args.supabase
     .from('parse_issues')
     .update({ status: 'resolved', corrected_text: args.correctedText, resolved_at: new Date().toISOString() })
     .eq('owner_id', args.ownerId)
     .eq('ticket_message_id', args.messageId)
     .eq('status', 'open');
+  if (args.issueId) issueUpdate = issueUpdate.eq('id', args.issueId);
+  const { error: issueUpdateError } = await issueUpdate;
+  if (issueUpdateError) throw issueUpdateError;
+
+  const nextRawText = mode === 'append'
+    ? appendCorrectionText(message.raw_text || '', args.correctedText)
+    : args.correctedText;
 
   const { data: updated, error: updateError } = await args.supabase
     .from('ticket_messages')
     .update({
-      raw_text: args.correctedText,
+      raw_text: nextRawText,
       parse_json: parsed,
       warnings: parsed.warnings || [],
       player_id: playerId,
@@ -129,12 +141,16 @@ export async function reparseTicketMessage(args: {
     .single();
   if (updateError) throw updateError;
 
-  const ticketRows = (parsed.tickets || []).map(ticket => serializeTicket(ticket, {
+  let ticketRows = (parsed.tickets || []).map(ticket => serializeTicket(ticket, {
     ownerId: args.ownerId,
     messageId: args.messageId,
     date: message.message_date,
     playerId,
   }));
+
+  if (mode === 'append' && ticketRows.length) {
+    ticketRows = await removeExistingTicketRows(args.supabase, args.ownerId, args.messageId, ticketRows);
+  }
 
   let tickets: any[] = [];
   if (ticketRows.length) {
@@ -158,6 +174,35 @@ export async function reparseTicketMessage(args: {
   }
 
   return { parsed, message: updated, tickets, issues };
+}
+
+function appendCorrectionText(rawText: string, correctedText: string) {
+  const trimmedRaw = rawText.trim();
+  const trimmedCorrection = correctedText.trim();
+  if (!trimmedRaw) return trimmedCorrection;
+  if (trimmedRaw.includes(trimmedCorrection)) return trimmedRaw;
+  return `${trimmedRaw}\n${trimmedCorrection}`;
+}
+
+async function removeExistingTicketRows(supabase: SupabaseLike, ownerId: string, messageId: string, ticketRows: any[]) {
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('loai,dai,so_list,tien_dat,source_text')
+    .eq('owner_id', ownerId)
+    .eq('ticket_message_id', messageId);
+  if (error) throw error;
+  const existing = new Set((data || []).map(ticketFingerprint));
+  return ticketRows.filter(row => !existing.has(ticketFingerprint(row)));
+}
+
+function ticketFingerprint(ticket: any) {
+  return JSON.stringify({
+    loai: ticket.loai || '',
+    dai: [...(ticket.dai || [])].sort(),
+    so_list: ticket.so_list || [],
+    tien_dat: Number(ticket.tien_dat || 0),
+    source_text: ticket.source_text || '',
+  });
 }
 
 async function findPlayer(supabase: SupabaseLike, ownerId: string, playerId: string) {

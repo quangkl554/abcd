@@ -12,6 +12,8 @@ export const createTicketMessageSchema = z.object({
 
 export const reparseSchema = z.object({
   correctedText: z.string().trim().min(1),
+  issueId: z.string().uuid().optional(),
+  mode: z.enum(['append', 'replace']).default('append'),
 });
 
 export const parseIssuePatchSchema = z.object({

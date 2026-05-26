@@ -195,9 +195,13 @@ export function Dashboard() {
   async function reparseIssue(issue: ParseIssue) {
     const correctedText = (issueDrafts[issue.id] || issue.source_text || '').trim();
     if (!correctedText) return setError('Tin sửa không được trống.');
-    const response = await apiPost(`/api/ticket-messages/${issue.ticket_message_id}/reparse`, { correctedText });
+    const response = await apiPost(`/api/ticket-messages/${issue.ticket_message_id}/reparse`, {
+      correctedText,
+      issueId: issue.id,
+      mode: 'append',
+    });
     if (!response.ok) return setError(response.error);
-    setNotice(response.issues?.length ? 'Đã parse lại, vẫn còn cảnh báo cần xem.' : 'Đã sửa và đóng cảnh báo.');
+    setNotice(response.issues?.length ? 'Đã thêm phần parse được, vẫn còn cảnh báo cần xem.' : 'Đã thêm dữ liệu sửa và đóng cảnh báo.');
     await loadWorkspace({ force: true });
   }
 
@@ -215,9 +219,9 @@ export function Dashboard() {
 
   async function saveEditedMessage() {
     if (!editingMessageId || !editingText.trim()) return setError('Tin sửa không được trống.');
-    const response = await apiPost(`/api/ticket-messages/${editingMessageId}/reparse`, { correctedText: editingText });
+    const response = await apiPost(`/api/ticket-messages/${editingMessageId}/reparse`, { correctedText: editingText, mode: 'append' });
     if (!response.ok) return setError(response.error);
-    setNotice(response.issues?.length ? 'Đã sửa tin, vẫn còn cảnh báo cần xử lý.' : 'Đã sửa tin và cập nhật bảng vé.');
+    setNotice(response.issues?.length ? 'Đã thêm phần sửa được, vẫn còn cảnh báo cần xử lý.' : 'Đã thêm dữ liệu từ tin sửa, không xóa vé cũ.');
     setEditingMessageId('');
     setEditingText('');
     await loadWorkspace({ force: true });
@@ -321,7 +325,7 @@ export function Dashboard() {
             <div className="section-header">
               <div>
                 <h2 className="section-title"><CheckCircle2 size={18} /> Bảng vé</h2>
-                <p className="section-note">Có thể sửa lại tin gốc hoặc xóa cả tin nếu nhập nhầm.</p>
+                <p className="section-note">Sửa/parse lại sẽ thêm dữ liệu mới và giữ nguyên các vé đã nhận trước đó.</p>
               </div>
               <span className="muted">{workspace?.tickets.length || 0} dòng</span>
             </div>
@@ -450,7 +454,7 @@ function TableRows(props: {
         <td className="source-cell">{props.ticket.source_text}</td>
         <td>
           <div className="table-actions">
-            <button className="btn icon soft" type="button" title="Sửa tin" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
+            <button className="btn icon soft" type="button" title="Thêm bản sửa từ tin này" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
             <button className="btn icon danger-soft" type="button" title="Xóa tin" onClick={() => props.deleteMessage(props.ticket)}><Trash2 size={16} /></button>
           </div>
         </td>
