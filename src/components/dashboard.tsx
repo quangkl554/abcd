@@ -467,12 +467,12 @@ function TableRows(props: {
         <td>{props.ticket.player_name}</td>
         <td>{props.ticket.dai.join(', ')}</td>
         <td><b>{props.ticket.so_list.join(' · ')}</b></td>
-        <td><TicketTypeBadge loai={props.ticket.loai} label={props.ticket.loai_label} /></td>
+        <td><TicketTypeBadge loai={props.ticket.loai} label={props.ticket.loai_label || props.ticket.loai} /></td>
         <td>{props.ticket.tien_dat}</td>
         <td>{money(props.ticket.xac)}</td>
         <td><StatusBadge status={props.ticket.status} /></td>
         <td>{props.ticket.tien_thang ? money(props.ticket.tien_thang) : ''}</td>
-        <td className="source-cell"><HighlightedSource text={props.ticket.source_text} /></td>
+        <td className="source-cell">{props.ticket.source_text}</td>
         <td>
           <div className="table-actions">
             <button className="btn icon soft" type="button" title="Thêm bản sửa từ tin này" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
@@ -498,19 +498,7 @@ function TableRows(props: {
 }
 
 function TicketTypeBadge({ loai, label }: { loai: string; label: string }) {
-  return <span className={`type-badge type-${typeClass(loai)}`}>{typeShortLabel(loai, label)}</span>;
-}
-
-function HighlightedSource({ text }: { text: string }) {
-  return (
-    <>
-      {(text || '').split(/(\s+)/).map((part, index) => {
-        const cls = sourceTokenClass(part);
-        if (!cls) return <span key={index}>{part}</span>;
-        return <span key={index} className={`source-token ${cls}`}>{part}</span>;
-      })}
-    </>
-  );
+  return <span className={`type-badge type-${typeClass(loai)}`}>{label}</span>;
 }
 
 function RatesEditor({ player, config, onSave }: { player: Player; config: Workspace['config']; onSave: (rateProfile: Player['rate_profile']) => void }) {
@@ -604,37 +592,6 @@ function typeClass(loai: string) {
   if (loai === 'XiuChu' || loai === 'XiuChuDau' || loai === 'XiuChuDuoi') return 'xc';
   if (loai.startsWith('Xien')) return 'xien';
   return 'other';
-}
-
-function typeShortLabel(loai: string, label: string) {
-  const labels: Record<string, string> = {
-    Lo: 'BLO',
-    Dau: 'ĐẦU',
-    Duoi: 'ĐUÔI',
-    DauDuoi: 'DD',
-    '3Cang': '3C',
-    '4Cang': '4C',
-    XiuChu: 'XC',
-    XiuChuDau: 'XC ĐẦU',
-    XiuChuDuoi: 'XC ĐUÔI',
-    Dau3C: 'ĐẦU 3C',
-    Duoi3C: 'ĐUÔI 3C',
-    DauDuoi3C: 'DD 3C',
-    Xien2: 'XIÊN 2',
-    Xien3: 'XIÊN 3',
-    Xien4: 'XIÊN 4',
-  };
-  return labels[loai] || label || loai;
-}
-
-function sourceTokenClass(raw: string) {
-  const token = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if (/(^|[^a-z0-9])2c([^a-z0-9]|$)/.test(token)) return 'source-2c';
-  if (/(^|[^a-z0-9])3c([^a-z0-9]|$)/.test(token) || /\d{3,4}(b|bl|blo)/.test(token)) return 'source-3c';
-  if (/(dd|dc|dau.?duoi|dau.?dui|ndd)/.test(token)) return 'source-dd';
-  if (/(^|[^a-z])(b|bl|blo)([^a-z]|$)/.test(token) || /\d{2}(b|bl|blo)/.test(token)) return 'source-lo';
-  if (/(xc|xiu.?chu)/.test(token)) return 'source-xc';
-  return '';
 }
 
 function money(value: number) {
