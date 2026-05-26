@@ -125,30 +125,36 @@ alter table public.tickets enable row level security;
 alter table public.parse_issues enable row level security;
 alter table public.draw_results enable row level security;
 
+drop policy if exists "profiles_select_self" on public.profiles;
 create policy "profiles_select_self"
 on public.profiles for select to authenticated
 using ((select auth.uid()) = user_id);
 
+drop policy if exists "players_owner_all" on public.players;
 create policy "players_owner_all"
 on public.players for all to authenticated
 using ((select auth.uid()) = owner_id)
 with check ((select auth.uid()) = owner_id);
 
+drop policy if exists "ticket_messages_owner_all" on public.ticket_messages;
 create policy "ticket_messages_owner_all"
 on public.ticket_messages for all to authenticated
 using ((select auth.uid()) = owner_id)
 with check ((select auth.uid()) = owner_id);
 
+drop policy if exists "tickets_owner_all" on public.tickets;
 create policy "tickets_owner_all"
 on public.tickets for all to authenticated
 using ((select auth.uid()) = owner_id)
 with check ((select auth.uid()) = owner_id);
 
+drop policy if exists "parse_issues_owner_all" on public.parse_issues;
 create policy "parse_issues_owner_all"
 on public.parse_issues for all to authenticated
 using ((select auth.uid()) = owner_id)
 with check ((select auth.uid()) = owner_id);
 
+drop policy if exists "draw_results_owner_all" on public.draw_results;
 create policy "draw_results_owner_all"
 on public.draw_results for all to authenticated
 using ((select auth.uid()) = owner_id)
