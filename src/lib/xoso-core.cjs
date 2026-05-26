@@ -2393,7 +2393,7 @@ function buildGroqMessages(rawText, context = {}) {
         'Bạn là bộ chuyển đổi tin dò xổ số sang JSON. Chỉ trích xuất dữ liệu, không tính tiền, không suy diễn kết quả. ' +
         'Giữ số có số 0 đầu. Loại vé hợp lệ gồm: ' +
         Object.keys(cfg.heSoXacDefault).join(', ') +
-        '. Quy ước: b/bl/blo là bao lô, không phải Bạc Liêu; Bạc Liêu phải có dạng bac lieu/blieu/b lieu. ' +
+        '. Quy ước: b/bl/blo là bao lô, không phải Bạc Liêu; Bạc Liêu có thể viết bac lieu/blieu/b lieu/bli. ' +
         'dd/đđ/dau duoi/dau cui là đầu đuôi. 1đ/2đ/3đ/4đ, 1 đài/2 đài/3 đài/4 đài là số lượng đài; nếu nằm trong ngoặc chỉ áp dụng trong ngoặc, nếu ở cuối dòng áp dụng cho cả dòng. ' +
         'Số tiền sau số hoặc loại vé có thể viết n/d/đ/k/m/trieu; ví dụ 23b100 là số 23 bao lô 100 điểm. ' +
         'Kéo/đến phải mở rộng dãy số: 123 đến 923 là 123,223,...,923; 101 đến 109 là 101,...,109; 02 đến 92 là 02,12,...,92. ' +

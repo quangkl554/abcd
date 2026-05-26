@@ -642,7 +642,7 @@ p {
 
 table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1140px;
   border-collapse: collapse;
   background: var(--panel);
 }
@@ -675,6 +675,76 @@ tr:hover td {
   color: var(--muted);
   line-height: 1.35;
   white-space: pre-wrap;
+}
+
+.message-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--purple) 15%, var(--panel));
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.type-badge,
+.source-token {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.type-badge {
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--type-color, var(--blue)) 38%, transparent);
+  background: color-mix(in srgb, var(--type-color, var(--blue)) 16%, var(--panel));
+  color: var(--type-color, var(--blue));
+}
+
+.type-lo,
+.source-lo {
+  --type-color: var(--blue);
+}
+
+.type-dd,
+.source-dd {
+  --type-color: var(--amber);
+}
+
+.type-c3,
+.source-3c {
+  --type-color: var(--purple);
+}
+
+.type-c4 {
+  --type-color: var(--red);
+}
+
+.type-xc,
+.source-xc {
+  --type-color: var(--teal);
+}
+
+.type-xien,
+.source-2c {
+  --type-color: var(--green);
+}
+
+.type-other {
+  --type-color: var(--muted);
+}
+
+.source-token {
+  display: inline;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--type-color, var(--blue)) 30%, transparent);
+  background: color-mix(in srgb, var(--type-color, var(--blue)) 17%, var(--panel));
+  color: var(--type-color, var(--blue));
 }
 
 .edit-row td {

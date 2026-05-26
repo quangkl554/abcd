@@ -271,6 +271,14 @@ test('plus-separated station aliases and trailing bli are treated as stations', 
   });
   assert.deepEqual(trailing.tickets.map(t => t.dai), [['Bạc Liêu'], ['Bạc Liêu']]);
   assert.deepEqual(trailing.tickets.map(t => t.loai), ['Lo', 'Duoi']);
+
+  const leading = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nbli b 12 10n dd 34 20n',
+    region: 'nam',
+    date: new Date(2026, 4, 12),
+  });
+  assert.deepEqual(leading.tickets.map(t => t.dai), [['Bạc Liêu'], ['Bạc Liêu']]);
+  assert.deepEqual(leading.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
 });
 
 test('parse station-prefixed bet type and bl before station scope', () => {

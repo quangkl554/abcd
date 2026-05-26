@@ -4,6 +4,7 @@ import { jsonError, jsonOk } from '@/lib/http';
 import { checkRequestSchema } from '@/lib/validation';
 import { checkTickets, summarizeTickets, type Region } from '@/lib/core';
 import { dbTicketToCore, mapStatus } from '@/lib/tickets';
+import { fetchAndStoreDrawResults } from '@/lib/draw-results-store';
 
 export const runtime = 'nodejs';
 
@@ -21,30 +22,39 @@ export async function POST(request: NextRequest) {
     if (drawResult.error) throw drawResult.error;
 
     const tickets = ticketResult.data || [];
-    const draws = drawResult.data || [];
+    let draws = drawResult.data || [];
     if (!tickets.length) return jsonOk({ checked: [], summary: [], message: 'Chua co ve de do.' });
-    if (!draws.length) return jsonOk({ needsResults: true, checked: [], summary: [], message: 'Chua co ket qua xo so.' });
+    let autoFetched = false;
+    if (!draws.length) {
+      const fetched = await fetchAndStoreDrawResults({ supabase, ownerId: user.id, date: input.date, region });
+      if (!fetched.ok) {
+        return jsonOk({
+          needsResults: true,
+          checked: [],
+          summary: [],
+          message: `${fetched.reason || 'Chưa có kết quả xổ số.'} Hãy vào trang Kết quả để dán tay.`,
+        });
+      }
+      draws = fetched.drawResults || [];
+      autoFetched = true;
+    }
 
     const drawMap = Object.fromEntries(draws.map((row: any) => [row.dai, row.prizes]));
     const checked = checkTickets(tickets.map(dbTicketToCore), drawMap, { region, activeDai: draws.map((row: any) => row.dai) });
 
-    await Promise.all(
-      checked.map(ticket =>
-        supabase
-          .from('tickets')
-          .update({
-            status: mapStatus(ticket.ketQua || '?'),
-            tien_thang: ticket.tienThang || 0,
-            ghi_chu: ticket.ghiChu || '',
-            hits: ticket.hits || [],
-            checked_at: new Date().toISOString(),
-          })
-          .eq('owner_id', user.id)
-          .eq('id', ticket.id),
-      ),
-    );
+    const checkedAt = new Date().toISOString();
+    const updateRows = checked.map((ticket, index) => ({
+      ...tickets[index],
+      status: mapStatus(ticket.ketQua || '?'),
+      tien_thang: ticket.tienThang || 0,
+      ghi_chu: ticket.ghiChu || '',
+      hits: ticket.hits || [],
+      checked_at: checkedAt,
+    }));
+    const { error: updateError } = await supabase.from('tickets').upsert(updateRows, { onConflict: 'id' });
+    if (updateError) throw updateError;
 
-    return jsonOk({ checked, summary: summarizeTickets(checked) });
+    return jsonOk({ checked, summary: summarizeTickets(checked), autoFetched });
   } catch (error) {
     const mapped = authErrorResponse(error);
     return jsonError(mapped.message, mapped.status || 400);

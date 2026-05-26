@@ -136,12 +136,12 @@ export function ResultsPage() {
   }
 
   async function checkAll() {
-    setNotice('');
+    setNotice('Đang dò kết quả. Nếu chưa có KQ, hệ thống sẽ tự tải nguồn trước...');
     setError('');
     startTransition(async () => {
       const response = await apiPost('/api/check', { date, region });
       if (!response.ok) return setError(response.error);
-      setNotice(response.message || `Đã dò ${response.checked?.length || 0} vé.`);
+      setNotice(response.message || `${response.autoFetched ? 'Đã tự tải KQ và ' : ''}Đã dò ${response.checked?.length || 0} vé.`);
       await loadWorkspace({ force: true });
     });
   }

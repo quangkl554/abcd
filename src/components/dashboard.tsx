@@ -55,6 +55,13 @@ type ParseIssue = {
   source_text: string | null;
 };
 
+type TicketMessage = {
+  id: string;
+  created_at: string;
+  player_name: string | null;
+  raw_text: string;
+};
+
 type Workspace = {
   profile: { username: string; role: 'admin' | 'user' };
   config: {
@@ -68,6 +75,7 @@ type Workspace = {
     resultSourceUrl: string;
   };
   players: Player[];
+  messages: TicketMessage[];
   tickets: Ticket[];
   issues: ParseIssue[];
   drawResults: Array<{ id: string; dai: string; source: string; prizes: Record<string, string[]> }>;
@@ -110,6 +118,13 @@ export function Dashboard() {
   const [pending, startTransition] = useTransition();
 
   const activeIssues = useMemo(() => (workspace?.issues || []).filter(issue => issue.status === 'open'), [workspace]);
+  const messageOrder = useMemo(() => {
+    const map = new Map<string, number>();
+    [...(workspace?.messages || [])]
+      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
+      .forEach((message, index) => map.set(message.id, index + 1));
+    return map;
+  }, [workspace]);
   const totals = useMemo(() => {
     const tickets = workspace?.tickets || [];
     return {
@@ -155,7 +170,7 @@ export function Dashboard() {
 
   function submitTicket(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setNotice('');
+    setNotice('Đang đọc tin...');
     setError('');
     startTransition(async () => {
       const response = await apiPost('/api/ticket-messages', {
@@ -195,6 +210,7 @@ export function Dashboard() {
   async function reparseIssue(issue: ParseIssue) {
     const correctedText = (issueDrafts[issue.id] || issue.source_text || '').trim();
     if (!correctedText) return setError('Tin sửa không được trống.');
+    setNotice('Đang parse lại và thêm dữ liệu...');
     const response = await apiPost(`/api/ticket-messages/${issue.ticket_message_id}/reparse`, {
       correctedText,
       issueId: issue.id,
@@ -219,6 +235,7 @@ export function Dashboard() {
 
   async function saveEditedMessage() {
     if (!editingMessageId || !editingText.trim()) return setError('Tin sửa không được trống.');
+    setNotice('Đang thêm dữ liệu từ bản sửa...');
     const response = await apiPost(`/api/ticket-messages/${editingMessageId}/reparse`, { correctedText: editingText, mode: 'append' });
     if (!response.ok) return setError(response.error);
     setNotice(response.issues?.length ? 'Đã thêm phần sửa được, vẫn còn cảnh báo cần xử lý.' : 'Đã thêm dữ liệu từ tin sửa, không xóa vé cũ.');
@@ -237,12 +254,12 @@ export function Dashboard() {
   }
 
   async function checkAll() {
-    setNotice('');
+    setNotice('Đang dò vé. Nếu chưa có KQ, hệ thống sẽ tự tải nguồn trước...');
     setError('');
     startTransition(async () => {
       const response = await apiPost('/api/check', { date, region });
       if (!response.ok) return setError(response.error);
-      setNotice(response.message || `Đã dò ${response.checked?.length || 0} vé.`);
+      setNotice(response.message || `${response.autoFetched ? 'Đã tự tải KQ và ' : ''}Đã dò ${response.checked?.length || 0} vé.`);
       await loadWorkspace({ force: true });
     });
   }
@@ -333,6 +350,7 @@ export function Dashboard() {
               <table>
                 <thead>
                   <tr>
+                    <th>Tin</th>
                     <th>Khách</th>
                     <th>Đài</th>
                     <th>Số</th>
@@ -350,6 +368,7 @@ export function Dashboard() {
                     <TableRows
                       key={ticket.id}
                       ticket={ticket}
+                      messageNumber={messageOrder.get(ticket.ticket_message_id) || 0}
                       editingMessageId={editingMessageId}
                       editingText={editingText}
                       setEditingText={setEditingText}
@@ -379,7 +398,7 @@ export function Dashboard() {
               {(workspace?.issues || []).length ? workspace?.issues.map(issue => (
                 <div className={`issue-item ${issue.status}`} key={issue.id}>
                   <div className="issue-meta">
-                    <span>Dòng {issue.line_no || '?'}</span>
+                    <span>Tin {messageOrder.get(issue.ticket_message_id) || '?'} · Dòng {issue.line_no || '?'}</span>
                     <span>{issue.status}</span>
                   </div>
                   <div className="issue-warning">{issue.warning}</div>
@@ -431,6 +450,7 @@ export function Dashboard() {
 
 function TableRows(props: {
   ticket: Ticket;
+  messageNumber: number;
   editingMessageId: string;
   editingText: string;
   setEditingText: (value: string) => void;
@@ -443,15 +463,16 @@ function TableRows(props: {
   return (
     <>
       <tr>
+        <td><span className="message-chip">Tin {props.messageNumber || '?'}</span></td>
         <td>{props.ticket.player_name}</td>
         <td>{props.ticket.dai.join(', ')}</td>
         <td><b>{props.ticket.so_list.join(' · ')}</b></td>
-        <td><span className="badge neutral">{props.ticket.loai_label || props.ticket.loai}</span></td>
+        <td><TicketTypeBadge loai={props.ticket.loai} label={props.ticket.loai_label} /></td>
         <td>{props.ticket.tien_dat}</td>
         <td>{money(props.ticket.xac)}</td>
         <td><StatusBadge status={props.ticket.status} /></td>
         <td>{props.ticket.tien_thang ? money(props.ticket.tien_thang) : ''}</td>
-        <td className="source-cell">{props.ticket.source_text}</td>
+        <td className="source-cell"><HighlightedSource text={props.ticket.source_text} /></td>
         <td>
           <div className="table-actions">
             <button className="btn icon soft" type="button" title="Thêm bản sửa từ tin này" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
@@ -461,7 +482,7 @@ function TableRows(props: {
       </tr>
       {isEditing ? (
         <tr className="edit-row">
-          <td colSpan={10}>
+          <td colSpan={11}>
             <div className="inline-editor">
               <textarea className="textarea small" value={props.editingText} onChange={event => props.setEditingText(event.target.value)} />
               <div className="row action-row">
@@ -472,6 +493,22 @@ function TableRows(props: {
           </td>
         </tr>
       ) : null}
+    </>
+  );
+}
+
+function TicketTypeBadge({ loai, label }: { loai: string; label: string }) {
+  return <span className={`type-badge type-${typeClass(loai)}`}>{typeShortLabel(loai, label)}</span>;
+}
+
+function HighlightedSource({ text }: { text: string }) {
+  return (
+    <>
+      {(text || '').split(/(\s+)/).map((part, index) => {
+        const cls = sourceTokenClass(part);
+        if (!cls) return <span key={index}>{part}</span>;
+        return <span key={index} className={`source-token ${cls}`}>{part}</span>;
+      })}
     </>
   );
 }
@@ -557,6 +594,47 @@ function toDisplayRates(values: Record<string, number>) {
 
 function fromDisplayRates(values: Record<string, number>) {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Math.round(Number(value || 0) * 10)]));
+}
+
+function typeClass(loai: string) {
+  if (loai === 'Lo') return 'lo';
+  if (loai === 'DauDuoi' || loai === 'Dau' || loai === 'Duoi') return 'dd';
+  if (loai === '3Cang' || loai === 'Dau3C' || loai === 'Duoi3C' || loai === 'DauDuoi3C') return 'c3';
+  if (loai === '4Cang') return 'c4';
+  if (loai === 'XiuChu' || loai === 'XiuChuDau' || loai === 'XiuChuDuoi') return 'xc';
+  if (loai.startsWith('Xien')) return 'xien';
+  return 'other';
+}
+
+function typeShortLabel(loai: string, label: string) {
+  const labels: Record<string, string> = {
+    Lo: 'BLO',
+    Dau: 'ĐẦU',
+    Duoi: 'ĐUÔI',
+    DauDuoi: 'DD',
+    '3Cang': '3C',
+    '4Cang': '4C',
+    XiuChu: 'XC',
+    XiuChuDau: 'XC ĐẦU',
+    XiuChuDuoi: 'XC ĐUÔI',
+    Dau3C: 'ĐẦU 3C',
+    Duoi3C: 'ĐUÔI 3C',
+    DauDuoi3C: 'DD 3C',
+    Xien2: 'XIÊN 2',
+    Xien3: 'XIÊN 3',
+    Xien4: 'XIÊN 4',
+  };
+  return labels[loai] || label || loai;
+}
+
+function sourceTokenClass(raw: string) {
+  const token = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/(^|[^a-z0-9])2c([^a-z0-9]|$)/.test(token)) return 'source-2c';
+  if (/(^|[^a-z0-9])3c([^a-z0-9]|$)/.test(token) || /\d{3,4}(b|bl|blo)/.test(token)) return 'source-3c';
+  if (/(dd|dc|dau.?duoi|dau.?dui|ndd)/.test(token)) return 'source-dd';
+  if (/(^|[^a-z])(b|bl|blo)([^a-z]|$)/.test(token) || /\d{2}(b|bl|blo)/.test(token)) return 'source-lo';
+  if (/(xc|xiu.?chu)/.test(token)) return 'source-xc';
+  return '';
 }
 
 function money(value: number) {
