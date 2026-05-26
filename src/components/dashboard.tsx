@@ -334,7 +334,7 @@ export function Dashboard() {
                 </select>
                 <button className="btn primary" type="submit" disabled={pending || !ticketText.trim()}><Plus size={17} /> Thêm tin</button>
               </div>
-              <textarea className="textarea ticket-input" value={ticketText} onChange={event => setTicketText(event.target.value)} placeholder={'Ví dụ:\nnguoi 1\nb 12 10n dd 20n'} />
+              <textarea className="textarea ticket-input" value={ticketText} onChange={event => setTicketText(event.target.value)} placeholder={'Ví dụ:\nb 12 10n dd 20n\n27 67b 80n xdui 80n'} />
             </form>
           </section>
 
@@ -350,7 +350,7 @@ export function Dashboard() {
               <table>
                 <thead>
                   <tr>
-                    <th>Tin</th>
+                    <th>STT / dòng</th>
                     <th>Khách</th>
                     <th>Đài</th>
                     <th>Số</th>
@@ -364,11 +364,13 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(workspace?.tickets || []).map(ticket => (
+                  {(workspace?.tickets || []).map((ticket, index) => (
                     <TableRows
                       key={ticket.id}
                       ticket={ticket}
+                      rowNumber={index + 1}
                       messageNumber={messageOrder.get(ticket.ticket_message_id) || 0}
+                      sourceLineNumber={ticketSourceLine(ticket, workspace?.messages || [])}
                       editingMessageId={editingMessageId}
                       editingText={editingText}
                       setEditingText={setEditingText}
@@ -389,6 +391,19 @@ export function Dashboard() {
         </div>
 
         <aside className="sidebar-flow">
+          <section className="section">
+            <div className="section-header">
+              <h2 className="section-title"><UserRound size={18} /> Khách</h2>
+            </div>
+            <form className="row" onSubmit={createPlayer}>
+              <input className="input" value={newPlayerName} onChange={event => setNewPlayerName(event.target.value)} placeholder="Tên khách mới" />
+              <button className="btn primary" type="submit"><Plus size={16} /> Thêm</button>
+            </form>
+            {activePlayer && workspace ? (
+              <RatesEditor player={activePlayer} config={workspace.config} onSave={saveRates} />
+            ) : <div className="empty-state compact">Chọn hoặc thêm khách để chỉnh hệ số.</div>}
+          </section>
+
           <section className="section">
             <div className="section-header">
               <h2 className="section-title"><AlertTriangle size={18} /> Tin cần sửa</h2>
@@ -419,19 +434,6 @@ export function Dashboard() {
             </div>
           </section>
 
-          <section className="section">
-            <div className="section-header">
-              <h2 className="section-title"><UserRound size={18} /> Khách</h2>
-            </div>
-            <form className="row" onSubmit={createPlayer}>
-              <input className="input" value={newPlayerName} onChange={event => setNewPlayerName(event.target.value)} placeholder="Tên khách mới" />
-              <button className="btn primary" type="submit"><Plus size={16} /> Thêm</button>
-            </form>
-            {activePlayer && workspace ? (
-              <RatesEditor player={activePlayer} config={workspace.config} onSave={saveRates} />
-            ) : <div className="empty-state compact">Chọn hoặc thêm khách để chỉnh hệ số.</div>}
-          </section>
-
           <section className="section danger-zone">
             <div className="section-header">
               <h2 className="section-title"><Trash2 size={18} /> Xóa dữ liệu</h2>
@@ -450,7 +452,9 @@ export function Dashboard() {
 
 function TableRows(props: {
   ticket: Ticket;
+  rowNumber: number;
   messageNumber: number;
+  sourceLineNumber: number | null;
   editingMessageId: string;
   editingText: string;
   setEditingText: (value: string) => void;
@@ -463,16 +467,21 @@ function TableRows(props: {
   return (
     <>
       <tr>
-        <td><span className="message-chip">Tin {props.messageNumber || '?'}</span></td>
+        <td>
+          <div className="ticket-index-cell">
+            <span className="message-chip">Vé {props.rowNumber}</span>
+            <span className="line-chip">Tin {props.messageNumber || '?'} · dòng {props.sourceLineNumber || '?'}</span>
+          </div>
+        </td>
         <td>{props.ticket.player_name}</td>
         <td>{props.ticket.dai.join(', ')}</td>
         <td><b>{props.ticket.so_list.join(' · ')}</b></td>
         <td><TicketTypeBadge loai={props.ticket.loai} label={props.ticket.loai_label || props.ticket.loai} /></td>
         <td>{props.ticket.tien_dat}</td>
         <td>{money(props.ticket.xac)}</td>
-        <td><StatusBadge status={props.ticket.status} /></td>
+        <td><StatusBadge status={props.ticket.status} winAmount={props.ticket.tien_thang} /></td>
         <td>{props.ticket.tien_thang ? money(props.ticket.tien_thang) : ''}</td>
-        <td className="source-cell">{props.ticket.source_text}</td>
+        <td className="source-cell"><HighlightedSource text={props.ticket.source_text} /></td>
         <td>
           <div className="table-actions">
             <button className="btn icon soft" type="button" title="Thêm bản sửa từ tin này" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
@@ -499,6 +508,18 @@ function TableRows(props: {
 
 function TicketTypeBadge({ loai, label }: { loai: string; label: string }) {
   return <span className={`type-badge type-${typeClass(loai)}`}>{label}</span>;
+}
+
+function HighlightedSource({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, index) => {
+        if (!part.trim()) return part;
+        const className = sourceTokenClass(part);
+        return className ? <span className={`source-token ${className}`} key={`${part}-${index}`}>{part}</span> : part;
+      })}
+    </>
+  );
 }
 
 function RatesEditor({ player, config, onSave }: { player: Player; config: Workspace['config']; onSave: (rateProfile: Player['rate_profile']) => void }) {
@@ -539,8 +560,8 @@ function RatesEditor({ player, config, onSave }: { player: Player; config: Works
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'TRUNG') return <span className="badge win">TRÚNG</span>;
+function StatusBadge({ status, winAmount = 0 }: { status: string; winAmount?: number }) {
+  if (status === 'TRUNG' || Number(winAmount || 0) > 0) return <span className="badge win">TRÚNG</span>;
   if (status === 'Truot') return <span className="badge loss">Trượt</span>;
   if (status === 'Chua co KQ') return <span className="badge warn">Chưa có KQ</span>;
   return <span className="badge neutral">?</span>;
@@ -592,6 +613,45 @@ function typeClass(loai: string) {
   if (loai === 'XiuChu' || loai === 'XiuChuDau' || loai === 'XiuChuDuoi') return 'xc';
   if (loai.startsWith('Xien')) return 'xien';
   return 'other';
+}
+
+function sourceTokenClass(token: string) {
+  const value = normalizeSourceToken(token);
+  if (!value) return '';
+  if (value === 'b' || value === 'bl' || value === 'blo' || value === 'bao' || /^\d{1,4}b{1,2}$/.test(value)) return 'source-lo';
+  if (value === 'dd' || value === 'dau' || value === 'dui' || value === 'duoi') return 'source-dd';
+  if (value === 'xc' || value === 'xchu' || value === 'xiuchu' || value === 'xdau' || value === 'xdui' || value === 'xduoi') return 'source-xc';
+  if (value === '3c' || value === '3d' || value === '3dai') return 'source-3c';
+  if (value === '4c' || value === '4d' || value === '4dai') return 'source-c4';
+  if (value === '2c' || value === '2d' || value === 'xien') return 'source-2c';
+  return '';
+}
+
+function normalizeSourceToken(token: string) {
+  return token
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(/^[^\da-z]+|[^\da-z]+$/g, '');
+}
+
+function ticketSourceLine(ticket: Ticket, messages: TicketMessage[]) {
+  const message = messages.find(item => item.id === ticket.ticket_message_id);
+  if (!message?.raw_text || !ticket.source_text) return null;
+  const source = normalizeTicketLine(ticket.source_text);
+  if (!source) return null;
+  const lines = message.raw_text.split(/\r?\n/);
+  const index = lines.findIndex(line => {
+    const current = normalizeTicketLine(line);
+    if (!current) return false;
+    return current === source || current.includes(source) || source.includes(current);
+  });
+  return index >= 0 ? index + 1 : null;
+}
+
+function normalizeTicketLine(value: string) {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function money(value: number) {

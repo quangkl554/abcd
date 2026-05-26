@@ -73,7 +73,7 @@ export function ResultsPage() {
     const tickets = workspace?.tickets || [];
     return {
       tickets: tickets.length,
-      checked: tickets.filter(ticket => ticket.status !== 'Chua co KQ' && ticket.status !== '?').length,
+      checked: tickets.filter(ticket => Number(ticket.tien_thang || 0) > 0 || (ticket.status !== 'Chua co KQ' && ticket.status !== '?')).length,
       xac: tickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
       win: tickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
     };

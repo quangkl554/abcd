@@ -55,8 +55,17 @@ export function dbTicketToCore(ticket: Record<string, any>): ParsedTicket {
 }
 
 export function mapStatus(status: string) {
-  if (status === 'TRUNG') return 'TRUNG';
-  if (status === 'Trượt' || status === 'Truot') return 'Truot';
-  if (status === 'Chưa có KQ' || status === 'Chua co KQ') return 'Chua co KQ';
+  const normalized = normalizeStatus(status);
+  if (normalized === 'trung') return 'TRUNG';
+  if (normalized === 'truot') return 'Truot';
+  if (normalized === 'chua co kq') return 'Chua co KQ';
   return '?';
+}
+
+function normalizeStatus(status: string) {
+  return String(status || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
