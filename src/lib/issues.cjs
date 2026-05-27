@@ -3,7 +3,7 @@
 function issueDraftsFromWarnings(args) {
   const lines = String(args.rawText || '').split(/\r?\n/);
   return [...new Set(args.warnings || [])].map(warning => {
-    const match = String(warning).match(/Dòng\s+(\d+)/i);
+    const match = String(warning).match(/(?:Dòng|DĂ²ng)\s+(\d+)/i);
     const lineNo = match ? Number(match[1]) : null;
     const sourceText = lineNo && lines[lineNo - 1] ? lines[lineNo - 1].trim() : null;
     return {

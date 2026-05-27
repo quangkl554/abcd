@@ -281,6 +281,31 @@ test('plus-separated station aliases and trailing bli are treated as stations', 
   assert.deepEqual(leading.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
 });
 
+test('parse glued station aliases and double b compact lo token', () => {
+  const date = new Date(2026, 4, 26);
+  const activeDai = core.getActiveDai('nam', date);
+  const gluedDai = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n3d 16 56 96b 60n dd 120n ( bli05 45 85b 100n dd 85 380n 05 45 95 180n 40 80b 50n 01 41 81b 40n 71 31 13b 50n dui 19 91 71 90 49 160n 17 57 97 b 120n dd 85 95 280n dui 97 57 260n 17 80n)',
+    region: 'nam',
+    date,
+  });
+  assert.deepEqual(gluedDai.tickets.slice(0, 2).map(t => t.dai), [activeDai, activeDai]);
+  assert.deepEqual(gluedDai.tickets.slice(2).map(t => t.dai), gluedDai.tickets.slice(2).map(() => [activeDai[2]]));
+  assert.deepEqual(gluedDai.tickets[2].soList, ['05', '45', '85']);
+
+  const doubleB = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n38 78bb75n dui 380n dau 120n',
+    region: 'nam',
+    date,
+  });
+  assert.deepEqual(doubleB.tickets.map(t => t.loai), ['Lo', 'Duoi', 'Dau']);
+  assert.deepEqual(doubleB.tickets.map(t => t.soList), [
+    ['38', '78'],
+    ['38', '78'],
+    ['38', '78'],
+  ]);
+});
+
 test('parse station-prefixed bet type and bl before station scope', () => {
   const prefixedType = core.parseTelegramEnvelope({
     text: 'nguoi 1:\nTpb.52.03.45.79.100nđđ60n.b.103.03.31.71.28.68.30nđđ30n',
@@ -580,6 +605,18 @@ test('suffix dd stake does not change next pulled group type', () => {
   assert.deepEqual(parsed.tickets.map(t => t.loai), ['3Cang', 'XiuChu', '3Cang', 'XiuChu']);
   assert.deepEqual(parsed.tickets.map(t => t.tienDat), [5, 120, 5, 120]);
   assert.deepEqual(parsed.tickets[2].soList, ['276', '376', '476', '576', '676', '776', '876', '976']);
+});
+
+test('two-digit bare group before repeated dd stake inherits previous dd suffix', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n3dai b.45.52.250n.dd100n b.13.31.48.70n.dd30n 23.32.72.97.79.09.30n.dd30n',
+    region: 'nam',
+    date: new Date(2026, 4, 26),
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', 'DauDuoi', 'Lo', 'DauDuoi', 'DauDuoi', 'DauDuoi']);
+  assert.deepEqual(parsed.tickets[4].soList, ['23', '32', '72', '97', '79', '09']);
+  assert.equal(parsed.tickets[4].xac, 756000);
 });
 
 test('bare xc stake before dd and ending 3d marker are not treated as numbers', () => {

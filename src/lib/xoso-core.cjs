@@ -722,6 +722,7 @@ function normalizeTicketType(typeRaw, region = REGION.NAM) {
   const t = compactKey(typeRaw);
   const base = {
     b: 'Lo',
+    bb: 'Lo',
     bl: 'Lo',
     blo: 'Lo',
     bao: 'Lo',
@@ -919,6 +920,12 @@ function expandCompactTokens(tokens, region) {
     const daiType = tok.match(/^([a-z]+)(b|bl|dd|dc|dau|duoi|dui|xc|xdau|xdui|xduoi)$/);
     if (daiType && detectDai(daiType[1], region) && normalizeTicketType(daiType[2], region)) {
       expanded.push(daiType[1], daiType[2]);
+      continue;
+    }
+
+    const daiNumber = tok.match(/^([a-z]+)(\d{2,4})$/);
+    if (daiNumber && detectDai(daiNumber[1], region)) {
+      expanded.push(daiNumber[1], daiNumber[2]);
       continue;
     }
 
@@ -1296,6 +1303,7 @@ function parseLegacyTickets(rawText, options = {}) {
     let lastNumBuf = [];
     let lastEmittedBatch = [];
     const lineEmittedTickets = [];
+    let recentSuffixLoai = null;
     let parenDepth = 0;
     const contextStack = [];
 
@@ -1518,15 +1526,18 @@ function parseLegacyTickets(rawText, options = {}) {
               flushVe(lastNumBuf, 'Dau', suffixStake, currentDaiList, suffixXienLevel);
               flushVe(lastNumBuf, 'Duoi', secondStake, currentDaiList, suffixXienLevel);
             }
+            recentSuffixLoai = null;
             i += 3;
             continue;
           }
           flushVe(lastNumBuf, suffixLoai, suffixStake, currentDaiList, suffixXienLevel);
+          recentSuffixLoai = suffixLoai;
           i += 2;
           continue;
         }
 
         currentLoai = typeCheck;
+        recentSuffixLoai = null;
         if (typeCheck === 'Xien' || typeCheck.startsWith('Xien')) {
           const mLevel = tok.match(/[234]/);
           if (mLevel) currentXienLevel = Number(mLevel[0]);
@@ -1552,6 +1563,7 @@ function parseLegacyTickets(rawText, options = {}) {
           }
           const tien = Number(mNumTypePlainTien[3]) || 10;
           flushVe(numBuf, currentLoai, tien, currentDaiList, currentXienLevel);
+          recentSuffixLoai = null;
           numBuf = [];
           i++;
           continue;
@@ -1579,6 +1591,7 @@ function parseLegacyTickets(rawText, options = {}) {
           }
           if (tien === 0) tien = 10;
           flushVe(numBuf, currentLoai, tien, currentDaiList, currentXienLevel);
+          recentSuffixLoai = null;
           numBuf = [];
           i++;
           continue;
@@ -1598,6 +1611,7 @@ function parseLegacyTickets(rawText, options = {}) {
           const targetNums = numBuf.length > 0 ? numBuf : lastNumBuf;
           if (targetNums.length > 0) {
             flushVe(targetNums, currentLoai, tien, currentDaiList, currentXienLevel);
+            recentSuffixLoai = null;
             numBuf = [];
           }
           i++;
@@ -1613,9 +1627,20 @@ function parseLegacyTickets(rawText, options = {}) {
 
       let tValue = getStakeTien(tok);
       if (tValue > 0) {
-        const lType = currentLoai || 'Lo';
         const targetNums = numBuf.length > 0 ? numBuf : lastNumBuf;
         if (targetNums.length > 0) {
+          let lType = currentLoai || 'Lo';
+          const nextType = i + 1 < tokens.length ? normalizeTicketType(tokens[i + 1], region) : null;
+          const nextTypeStake = nextType && i + 2 < tokens.length ? getStakeTien(tokens[i + 2]) : 0;
+          const shouldInheritRecentSuffix =
+            numBuf.length > 0 &&
+            recentSuffixLoai &&
+            recentSuffixLoai === nextType &&
+            nextTypeStake > 0 &&
+            lType === 'Lo' &&
+            targetNums.every(n => String(n).length === 2);
+          if (shouldInheritRecentSuffix) lType = recentSuffixLoai;
+
           let consumedExtraStakeToken = false;
           if (tValue >= 1000 && i + 1 < tokens.length && /^\d{1,3}$/.test(tokens[i + 1])) {
             tValue += Number(tokens[i + 1]);
@@ -1629,11 +1654,13 @@ function parseLegacyTickets(rawText, options = {}) {
               flushVe(targetNums, 'Dau', tValue, currentDaiList, currentXienLevel);
               flushVe(targetNums, 'Duoi', nextValue, currentDaiList, currentXienLevel);
             }
+            recentSuffixLoai = null;
             numBuf = [];
             i += 2;
             continue;
           }
           flushVe(targetNums, lType, tValue, currentDaiList, currentXienLevel);
+          recentSuffixLoai = null;
           numBuf = [];
           if (consumedExtraStakeToken) {
             i += 2;
