@@ -224,7 +224,18 @@ async function upsertPlayer(supabase: SupabaseLike, ownerId: string, name: strin
     .eq('name', name)
     .maybeSingle();
   if (existing.error) throw existing.error;
-  if (existing.data) return existing.data;
+  if (existing.data) {
+    if (existing.data.active) return existing.data;
+    const { data, error } = await supabase
+      .from('players')
+      .update({ active: true })
+      .eq('owner_id', ownerId)
+      .eq('id', existing.data.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  }
 
   const { data, error } = await supabase
     .from('players')

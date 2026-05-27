@@ -34,6 +34,7 @@ type Player = {
 type Ticket = {
   id: string;
   ticket_message_id: string;
+  player_id: string | null;
   player_name: string;
   dai: string[];
   loai: string;
@@ -59,6 +60,7 @@ type ParseIssue = {
 type TicketMessage = {
   id: string;
   created_at: string;
+  player_id: string | null;
   player_name: string | null;
   raw_text: string;
 };
@@ -80,7 +82,7 @@ type Workspace = {
   tickets: Ticket[];
   issues: ParseIssue[];
   drawResults: Array<{ id: string; dai: string; source: string; prizes: Record<string, string[]> }>;
-  summary: Array<{ playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
+  summary: Array<{ playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
 };
 
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
@@ -114,23 +116,38 @@ export function Dashboard() {
   const [notice, setNotice] = useState('');
   const [pending, startTransition] = useTransition();
 
-  const activeIssues = useMemo(() => (workspace?.issues || []).filter(issue => issue.status === 'open'), [workspace]);
+  const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
+  const filteredTickets = useMemo(() => {
+    const tickets = workspace?.tickets || [];
+    if (!selectedPlayerId || !activePlayer) return tickets;
+    return tickets.filter(ticket => ticket.player_id === selectedPlayerId || (!ticket.player_id && ticket.player_name === activePlayer.name));
+  }, [activePlayer, selectedPlayerId, workspace?.tickets]);
+  const filteredMessages = useMemo(() => {
+    const messages = workspace?.messages || [];
+    if (!selectedPlayerId || !activePlayer) return messages;
+    return messages.filter(message => message.player_id === selectedPlayerId || (!message.player_id && message.player_name === activePlayer.name));
+  }, [activePlayer, selectedPlayerId, workspace?.messages]);
+  const filteredMessageIds = useMemo(() => new Set(filteredMessages.map(message => message.id)), [filteredMessages]);
+  const filteredIssues = useMemo(() => {
+    const issues = workspace?.issues || [];
+    if (!selectedPlayerId) return issues;
+    return issues.filter(issue => filteredMessageIds.has(issue.ticket_message_id));
+  }, [filteredMessageIds, selectedPlayerId, workspace?.issues]);
+  const activeIssues = useMemo(() => filteredIssues.filter(issue => issue.status === 'open'), [filteredIssues]);
   const messageOrder = useMemo(() => {
     const map = new Map<string, number>();
-    [...(workspace?.messages || [])]
+    [...filteredMessages]
       .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
       .forEach((message, index) => map.set(message.id, index + 1));
     return map;
-  }, [workspace]);
+  }, [filteredMessages]);
   const totals = useMemo(() => {
-    const tickets = workspace?.tickets || [];
     return {
-      tickets: tickets.length,
-      xac: tickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
-      win: tickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
+      tickets: filteredTickets.length,
+      xac: filteredTickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
+      win: filteredTickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
     };
-  }, [workspace]);
-  const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
+  }, [filteredTickets]);
 
   useEffect(() => {
     const players = workspace?.players || [];
@@ -179,6 +196,18 @@ export function Dashboard() {
     const response = await apiPatch('/api/players', { id: activePlayer.id, rateProfile });
     if (!response.ok) return setError(response.error);
     setNotice('Đã lưu hệ số và tỉ lệ cho khách.');
+    await loadWorkspace({ force: true });
+  }
+
+  async function deletePlayer() {
+    if (!activePlayer) return;
+    const ok = window.confirm(`Xóa khách "${activePlayer.name}" khỏi danh sách? Vé cũ vẫn được giữ lại để xem lịch sử.`);
+    if (!ok) return;
+    const response = await apiDelete('/api/players', { id: activePlayer.id });
+    if (!response.ok) return setError(response.error);
+    setNotice(`Đã xóa khách ${activePlayer.name} khỏi danh sách.`);
+    const nextPlayer = (workspace?.players || []).find(player => player.id !== activePlayer.id);
+    setSelectedPlayerId(nextPlayer?.id || '');
     await loadWorkspace({ force: true });
   }
 
@@ -319,14 +348,13 @@ export function Dashboard() {
                 <h2 className="section-title"><CheckCircle2 size={18} /> Bảng vé</h2>
                 <p className="section-note">Sửa/parse lại sẽ thêm dữ liệu mới và giữ nguyên các vé đã nhận trước đó.</p>
               </div>
-              <span className="muted">{workspace?.tickets.length || 0} dòng</span>
+              <span className="muted">{filteredTickets.length} dòng</span>
             </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>STT / dòng</th>
-                    <th>Khách</th>
                     <th>Đài</th>
                     <th>Số</th>
                     <th>Loại</th>
@@ -339,13 +367,13 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(workspace?.tickets || []).map((ticket, index) => (
+                  {filteredTickets.map((ticket, index) => (
                     <TableRows
                       key={ticket.id}
                       ticket={ticket}
                       rowNumber={index + 1}
                       messageNumber={messageOrder.get(ticket.ticket_message_id) || 0}
-                      sourceLineNumber={ticketSourceLine(ticket, workspace?.messages || [])}
+                      sourceLineNumber={ticketSourceLine(ticket, filteredMessages)}
                       editingMessageId={editingMessageId}
                       editingText={editingText}
                       setEditingText={setEditingText}
@@ -360,7 +388,7 @@ export function Dashboard() {
                   ))}
                 </tbody>
               </table>
-              {!workspace?.tickets.length ? <div className="empty-state">Chưa có vé trong ngày/miền này.</div> : null}
+              {!filteredTickets.length ? <div className="empty-state">Chưa có vé của khách này trong ngày/miền đang chọn.</div> : null}
             </div>
           </section>
         </div>
@@ -375,7 +403,7 @@ export function Dashboard() {
               <button className="btn primary" type="submit"><Plus size={16} /> Thêm</button>
             </form>
             {activePlayer && workspace ? (
-              <RatesEditor player={activePlayer} config={workspace.config} onSave={saveRates} />
+              <RatesEditor player={activePlayer} config={workspace.config} onSave={saveRates} onDelete={deletePlayer} />
             ) : <div className="empty-state compact">Chọn hoặc thêm khách để chỉnh hệ số.</div>}
           </section>
 
@@ -385,7 +413,7 @@ export function Dashboard() {
               <span className="badge warn">{activeIssues.length}</span>
             </div>
             <div className="issue-list">
-              {(workspace?.issues || []).length ? workspace?.issues.map(issue => (
+              {filteredIssues.length ? filteredIssues.map(issue => (
                 <div className={`issue-item ${issue.status}`} key={issue.id}>
                   <div className="issue-meta">
                     <span>Tin {messageOrder.get(issue.ticket_message_id) || '?'} · Dòng {issue.line_no || '?'}</span>
@@ -448,7 +476,6 @@ function TableRows(props: {
             <span className="line-chip">Tin {props.messageNumber || '?'} · dòng {props.sourceLineNumber || '?'}</span>
           </div>
         </td>
-        <td>{props.ticket.player_name}</td>
         <td>{props.ticket.dai.join(', ')}</td>
         <td><b>{props.ticket.so_list.join(' · ')}</b></td>
         <td><TicketTypeBadge loai={props.ticket.loai} label={props.ticket.loai_label || props.ticket.loai} /></td>
@@ -466,7 +493,7 @@ function TableRows(props: {
       </tr>
       {isEditing ? (
         <tr className="edit-row">
-          <td colSpan={11}>
+          <td colSpan={10}>
             <div className="inline-editor">
               <textarea className="textarea small" value={props.editingText} onChange={event => props.setEditingText(event.target.value)} />
               <div className="row action-row">
@@ -497,7 +524,7 @@ function HighlightedSource({ text }: { text: string }) {
   );
 }
 
-function RatesEditor({ player, config, onSave }: { player: Player; config: Workspace['config']; onSave: (rateProfile: Player['rate_profile']) => void }) {
+function RatesEditor({ player, config, onSave, onDelete }: { player: Player; config: Workspace['config']; onSave: (rateProfile: Player['rate_profile']) => void; onDelete: () => void }) {
   const keys = Object.keys(config.heSoXacDefault);
   const [heSoXac, setHeSoXac] = useState<Record<string, number>>({});
   const [tyLe, setTyLe] = useState<Record<string, number>>({});
@@ -530,7 +557,10 @@ function RatesEditor({ player, config, onSave }: { player: Player; config: Works
           <input className="input" type="number" value={tyLe[key] ?? ''} onChange={event => setTyLe(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
         </div>
       ))}
-      <button className="btn primary" type="button" onClick={save}><Save size={17} /> Lưu hệ số</button>
+      <div className="row rates-actions">
+        <button className="btn primary" type="button" onClick={save}><Save size={17} /> Lưu hệ số</button>
+        <button className="btn danger-soft" type="button" onClick={onDelete}><Trash2 size={17} /> Xóa khách</button>
+      </div>
     </div>
   );
 }

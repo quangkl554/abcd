@@ -496,7 +496,7 @@ p {
 
 .region-control {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 6px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -550,6 +550,10 @@ p {
 }
 
 .region-tab:nth-child(3).active {
+  outline-color: color-mix(in srgb, var(--purple) 30%, transparent);
+}
+
+.region-tab:nth-child(4).active {
   outline-color: color-mix(in srgb, var(--purple) 30%, transparent);
 }
 
@@ -673,7 +677,7 @@ p {
 
 table {
   width: 100%;
-  min-width: 1140px;
+  min-width: 1040px;
   border-collapse: collapse;
   background: var(--panel);
 }
@@ -894,6 +898,11 @@ tr:hover td {
   width: 100%;
 }
 
+.rates-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
 .rate-grid {
   display: grid;
   grid-template-columns: minmax(92px, 1fr) repeat(2, minmax(76px, 104px));
@@ -1062,7 +1071,7 @@ tr:hover td {
 .summary-table-head,
 .summary-table-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.4fr) 70px repeat(3, minmax(100px, 1fr));
+  grid-template-columns: minmax(180px, 1fr) minmax(70px, 0.55fr) repeat(3, minmax(120px, 0.8fr));
   gap: 10px;
   align-items: center;
 }
@@ -1208,6 +1217,10 @@ tr:hover td {
   }
 
   .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rates-actions {
     grid-template-columns: 1fr;
   }
 

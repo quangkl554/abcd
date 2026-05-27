@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   CalendarDays,
@@ -18,10 +18,19 @@ import { useWorkspaceData } from '@/lib/use-workspace-data';
 import { AppHeader } from './app-header';
 
 type Region = 'nam' | 'trung' | 'bac';
+type RegionScope = Region | 'all';
+
+type Player = {
+  id: string;
+  name: string;
+  active: boolean;
+};
 
 type Ticket = {
   id: string;
+  player_id: string | null;
   player_name: string;
+  region?: Region;
   dai: string[];
   loai: string;
   loai_label: string;
@@ -33,13 +42,14 @@ type Ticket = {
 type Workspace = {
   profile: { username: string; role: 'admin' | 'user' };
   config: {
-    region: Region;
+    region: RegionScope;
     regionName: string;
     activeDai: string[];
   };
+  players: Player[];
   tickets: Ticket[];
   drawResults: Array<{ id: string; dai: string }>;
-  summary: Array<{ playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
+  summary: Array<{ playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
 };
 
 type MetricRow = {
@@ -50,7 +60,8 @@ type MetricRow = {
   net: number;
 };
 
-const REGIONS: Array<{ id: Region; label: string; short: string }> = [
+const REGIONS: Array<{ id: RegionScope; label: string; short: string }> = [
+  { id: 'all', label: 'Cả ngày', short: 'Cả ngày' },
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
   { id: 'trung', label: 'Miền Trung', short: 'Trung' },
   { id: 'bac', label: 'Miền Bắc', short: 'Bắc' },
@@ -58,10 +69,17 @@ const REGIONS: Array<{ id: Region; label: string; short: string }> = [
 
 export function SummaryPage() {
   const [date, setDate] = useState(todayKey());
-  const [region, setRegion] = useState<Region>('nam');
+  const [region, setRegion] = useState<RegionScope>('all');
+  const [selectedPlayerId, setSelectedPlayerId] = useState('all');
   const { workspace, loading, error, loadWorkspace } = useWorkspaceData<Workspace>(date, region);
 
-  const tickets = workspace?.tickets || [];
+  const tickets = useMemo(() => {
+    const rows = workspace?.tickets || [];
+    if (selectedPlayerId === 'all') return rows;
+    const player = workspace?.players.find(item => item.id === selectedPlayerId);
+    return rows.filter(ticket => ticket.player_id === selectedPlayerId || (!ticket.player_id && player && ticket.player_name === player.name));
+  }, [selectedPlayerId, workspace?.players, workspace?.tickets]);
+  const summaryRows = useMemo(() => groupByPlayer(tickets), [tickets]);
   const totals = useMemo(() => ({
     tickets: tickets.length,
     xac: tickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
@@ -71,6 +89,13 @@ export function SummaryPage() {
   const byType = useMemo(() => groupTickets(tickets, ticket => ticket.loai_label || ticket.loai || 'Chưa rõ'), [tickets]);
   const byDai = useMemo(() => groupByDai(tickets), [tickets]);
   const byStatus = useMemo(() => groupTickets(tickets, statusLabel), [tickets]);
+
+  useEffect(() => {
+    if (selectedPlayerId === 'all') return;
+    if (!workspace?.players.some(player => player.id === selectedPlayerId)) {
+      setSelectedPlayerId('all');
+    }
+  }, [selectedPlayerId, workspace?.players]);
 
   return (
     <main className="app-shell">
@@ -96,6 +121,10 @@ export function SummaryPage() {
               ))}
             </div>
             <div className="control-actions">
+              <select className="select compact" value={selectedPlayerId} onChange={event => setSelectedPlayerId(event.target.value)}>
+                <option value="all">Tất cả khách</option>
+                {workspace?.players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}
+              </select>
               <button className="btn soft" type="button" onClick={() => loadWorkspace({ force: true })}><RefreshCw size={17} className={loading ? 'spin' : ''} /> Tải lại</button>
               <Link className="btn soft" href="/app"><FileText size={17} /> Vé</Link>
               <Link className="btn soft" href="/results"><ListChecks size={17} /> Kết quả</Link>
@@ -118,14 +147,14 @@ export function SummaryPage() {
                 <h2 className="section-title"><UsersRound size={18} /> Tổng theo khách</h2>
                 <p className="section-note">Kết quả tính trên ngày, miền và vé đang chọn.</p>
               </div>
-              <span className="badge neutral">{workspace?.summary.length || 0} khách</span>
+              <span className="badge neutral">{summaryRows.length} khách</span>
             </div>
             <div className="summary-table">
               <div className="summary-table-head">
                 <span>Khách</span><span>Vé</span><span>Xác</span><span>Thắng</span><span>Lãi lỗ</span>
               </div>
-              {(workspace?.summary || []).map(row => (
-                <div className="summary-table-row" key={row.playerName}>
+              {summaryRows.map(row => (
+                <div className="summary-table-row" key={row.playerId || row.playerName}>
                   <b>{row.playerName}</b>
                   <span>{row.soVe}</span>
                   <span>{money(row.tongXac)}</span>
@@ -133,7 +162,7 @@ export function SummaryPage() {
                   <strong className={row.laiLo >= 0 ? 'positive' : 'negative'}>{money(row.laiLo)}</strong>
                 </div>
               ))}
-              {!workspace?.summary.length ? <div className="empty-state compact">Chưa có vé để tổng hợp.</div> : null}
+              {!summaryRows.length ? <div className="empty-state compact">Chưa có vé để tổng hợp.</div> : null}
             </div>
           </section>
 
@@ -187,6 +216,20 @@ function groupTickets(tickets: Ticket[], getLabel: (ticket: Ticket) => string) {
   return sortRows(rows);
 }
 
+function groupByPlayer(tickets: Ticket[]) {
+  const rows = new Map<string, { playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>();
+  for (const ticket of tickets) {
+    const key = ticket.player_id || ticket.player_name || 'Khach';
+    const row = rows.get(key) || { playerId: ticket.player_id || null, playerName: ticket.player_name || 'Khach', soVe: 0, tongXac: 0, tongTrung: 0, laiLo: 0 };
+    row.soVe += 1;
+    row.tongXac += Number(ticket.xac || 0);
+    row.tongTrung += Number(ticket.tien_thang || 0);
+    row.laiLo = row.tongTrung - row.tongXac;
+    rows.set(key, row);
+  }
+  return [...rows.values()].sort((a, b) => Math.abs(b.laiLo) - Math.abs(a.laiLo));
+}
+
 function groupByDai(tickets: Ticket[]) {
   const rows = new Map<string, MetricRow>();
   for (const ticket of tickets) {
@@ -233,6 +276,6 @@ function shiftDate(value: string, days: number) {
   return new Date(next.getTime() - offset).toISOString().slice(0, 10);
 }
 
-function regionName(region: Region) {
+function regionName(region: RegionScope) {
   return REGIONS.find(item => item.id === region)?.label || region;
 }

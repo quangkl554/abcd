@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type WorkspaceRegion = 'nam' | 'trung' | 'bac';
+export type WorkspaceRegion = 'nam' | 'trung' | 'bac' | 'all';
 
 type LoadWorkspaceOptions = {
   force?: boolean;
@@ -54,7 +54,10 @@ export function useWorkspaceData<TWorkspace>(date: string, region: WorkspaceRegi
     if (!cached) setError('');
 
     try {
-      const response = await fetch(`/api/workspace?date=${encodeURIComponent(queryDate)}&region=${encodeURIComponent(queryRegion)}`, {
+      const endpoint = queryRegion === 'all'
+        ? `/api/workspace/day?date=${encodeURIComponent(queryDate)}`
+        : `/api/workspace?date=${encodeURIComponent(queryDate)}&region=${encodeURIComponent(queryRegion)}`;
+      const response = await fetch(endpoint, {
         cache: 'no-store',
         signal: controller.signal,
       });
