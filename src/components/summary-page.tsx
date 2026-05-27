@@ -121,10 +121,6 @@ export function SummaryPage() {
               ))}
             </div>
             <div className="control-actions">
-              <select className="select compact" value={selectedPlayerId} onChange={event => setSelectedPlayerId(event.target.value)}>
-                <option value="all">Tất cả khách</option>
-                {workspace?.players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}
-              </select>
               <button className="btn soft" type="button" onClick={() => loadWorkspace({ force: true })}><RefreshCw size={17} className={loading ? 'spin' : ''} /> Tải lại</button>
               <Link className="btn soft" href="/app"><FileText size={17} /> Vé</Link>
               <Link className="btn soft" href="/results"><ListChecks size={17} /> Kết quả</Link>
@@ -151,11 +147,18 @@ export function SummaryPage() {
             </div>
             <div className="summary-table">
               <div className="summary-table-head">
-                <span>Khách</span><span>Vé</span><span>Xác</span><span>Thắng</span><span>Lãi lỗ</span>
+                <div className="summary-head-cell">
+                  <span>Khách</span>
+                  <select className="select summary-player-select" value={selectedPlayerId} onChange={event => setSelectedPlayerId(event.target.value)}>
+                    <option value="all">Tất cả khách</option>
+                    {workspace?.players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}
+                  </select>
+                </div>
+                <span>Vé</span><span>Xác</span><span>Thắng</span><span>Lãi lỗ</span>
               </div>
               {summaryRows.map(row => (
                 <div className="summary-table-row" key={row.playerId || row.playerName}>
-                  <b>{row.playerName}</b>
+                  <b className="summary-player-name">{row.playerName}</b>
                   <span>{row.soVe}</span>
                   <span>{money(row.tongXac)}</span>
                   <span>{money(row.tongTrung)}</span>

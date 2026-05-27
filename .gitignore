@@ -5,6 +5,7 @@ node_modules
 .vercel
 coverage
 dist
+.codex-tmp/
 *.tsbuildinfo
 *.log
 npm-debug.log*
