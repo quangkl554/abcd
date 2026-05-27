@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Calculator, CalendarDays, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { useWorkspaceData } from '@/lib/use-workspace-data';
 import { AppHeader } from './app-header';
 
 type Region = 'nam' | 'trung' | 'bac';
@@ -60,13 +61,11 @@ const SAMPLE_BY_REGION: Record<Region, string> = {
 export function ResultsPage() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const workspaceCache = useRef<Record<string, Workspace>>({});
-  const requestSeq = useRef(0);
+  const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region);
+  const [autoFetchResults, setAutoFetchResults] = useState(true);
+  const autoFetchKey = useRef('');
   const [manualKq, setManualKq] = useState('');
-  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
   const totals = useMemo(() => {
@@ -80,47 +79,37 @@ export function ResultsPage() {
   }, [workspace]);
 
   useEffect(() => {
-    loadWorkspace({ targetDate: date, targetRegion: region });
+    const saved = window.localStorage.getItem('xoso-auto-fetch-results');
+    if (saved === 'false') setAutoFetchResults(false);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('xoso-auto-fetch-results', autoFetchResults ? 'true' : 'false');
+  }, [autoFetchResults]);
+
+  useEffect(() => {
+    if (!autoFetchResults || !workspace || loading || pending || workspace.drawResults.length) return;
+    const key = `${date}|${region}`;
+    if (autoFetchKey.current === key) return;
+    autoFetchKey.current = key;
+    void fetchDraw({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, region]);
+  }, [autoFetchResults, workspace, loading, pending, date, region]);
 
-  async function loadWorkspace(options?: { force?: boolean; targetDate?: string; targetRegion?: Region }) {
-    const queryDate = options?.targetDate || date;
-    const queryRegion = options?.targetRegion || region;
-    const cacheKey = `${queryDate}|${queryRegion}`;
-    if (!options?.force && workspaceCache.current[cacheKey]) {
-      setWorkspace(workspaceCache.current[cacheKey]);
+  async function fetchDraw(options?: { silent?: boolean }) {
+    if (options?.silent) {
+      setNotice('Đang tự lấy kết quả từ nguồn đã cấu hình...');
+    } else {
+      setNotice('');
+      setError('');
     }
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch(`/api/workspace?date=${queryDate}&region=${queryRegion}`, { cache: 'no-store' });
-      const payload = await response.json();
-      if (seq !== requestSeq.current) return;
-      if (!response.ok || !payload.ok) {
-        setError(payload.error || 'Không tải được dữ liệu.');
-        return;
-      }
-      workspaceCache.current[cacheKey] = payload as Workspace;
-      setWorkspace(payload as Workspace);
-    } catch {
-      if (seq === requestSeq.current) setError('Không tải được dữ liệu.');
-    } finally {
-      if (seq === requestSeq.current) setLoading(false);
-    }
-  }
-
-  async function fetchDraw() {
-    setNotice('');
-    setError('');
     startTransition(async () => {
       const response = await apiPost('/api/draw-results/fetch', { date, region });
       if (!response.ok) return setError(response.error);
       if (response.needsManual) {
-        setNotice(`${response.reason} Hãy dán kết quả thủ công ở khung bên dưới.`);
+        setNotice(`${response.reason} Nếu nguồn chưa đủ dữ liệu, hãy dùng khung dán tay bên dưới.`);
       } else {
-        setNotice('Đã tải và lưu kết quả tự động.');
+        setNotice(options?.silent ? 'Đã tự lấy và lưu kết quả.' : 'Đã tải và lưu kết quả tự động.');
         await loadWorkspace({ force: true });
       }
     });
@@ -211,7 +200,13 @@ export function ResultsPage() {
                 <h2 className="section-title"><Download size={18} /> Tải kết quả tự động</h2>
                 <p className="section-note">{workspace?.config.regionName} - Đài hôm nay: {workspace?.config.activeDai.join(', ') || 'chưa có'}</p>
               </div>
-              <button className="btn primary" type="button" onClick={fetchDraw} disabled={pending}><RefreshCw size={17} /> Tải tự động</button>
+              <div className="section-actions">
+                <label className="toggle">
+                  <input type="checkbox" checked={autoFetchResults} onChange={event => setAutoFetchResults(event.target.checked)} />
+                  <span>Tự lấy khi mở</span>
+                </label>
+                <button className="btn primary" type="button" onClick={() => fetchDraw()} disabled={pending}><RefreshCw size={17} /> Tải ngay</button>
+              </div>
             </div>
             <div className="source-box">
               <div>

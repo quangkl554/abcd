@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 type AppHeaderProps = {
   username?: string;
   role?: 'admin' | 'user';
-  activePage: 'tickets' | 'results';
+  activePage: 'tickets' | 'results' | 'summary';
 };
 
 export function AppHeader({ username, role, activePage }: AppHeaderProps) {
@@ -49,6 +49,7 @@ export function AppHeader({ username, role, activePage }: AppHeaderProps) {
       <nav className="page-tabs" aria-label="Điều hướng chính">
         <Link className={`page-tab ${activePage === 'tickets' ? 'active' : ''}`} href="/app">Vé</Link>
         <Link className={`page-tab ${activePage === 'results' ? 'active' : ''}`} href="/results">Kết quả</Link>
+        <Link className={`page-tab ${activePage === 'summary' ? 'active' : ''}`} href="/summary">Tổng hợp</Link>
       </nav>
 
       <div className="topbar-actions">

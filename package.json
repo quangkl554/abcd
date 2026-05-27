@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/safe-next-build.mjs",
+    "typecheck": "tsc --noEmit --pretty false",
+    "verify": "npm run test && npm run typecheck",
     "start": "next start",
     "lint": "next lint",
     "test": "node tests/run-tests.cjs",

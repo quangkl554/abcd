@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 export async function middleware(request: NextRequest) {
-  const protectedPath = request.nextUrl.pathname.startsWith('/app') || request.nextUrl.pathname.startsWith('/admin');
+  const protectedPath = ['/app', '/results', '/summary', '/admin'].some(path => request.nextUrl.pathname.startsWith(path));
   if (!protectedPath) return NextResponse.next();
 
   let response = NextResponse.next({ request });
@@ -50,5 +50,5 @@ function redirectToLogin(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/app/:path*', '/admin/:path*'],
+  matcher: ['/app/:path*', '/results/:path*', '/summary/:path*', '/admin/:path*'],
 };

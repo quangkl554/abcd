@@ -12,7 +12,23 @@ export async function fetchAndStoreDrawResults(args: {
   const url = resultSourceUrl(args.region);
   if (!url) return { ok: false, needsManual: true, reason: 'Chưa cấu hình URL kết quả.' };
 
-  const response = await fetch(url, { cache: 'no-store' });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        'user-agent': 'Mozilla/5.0 XosoWeb/1.0',
+      },
+    });
+  } catch {
+    return { ok: false, needsManual: true, reason: 'Không tải được nguồn kết quả tự động.' };
+  } finally {
+    clearTimeout(timeout);
+  }
+
   if (!response.ok) {
     return { ok: false, needsManual: true, reason: `URL kết quả trả HTTP ${response.status}.` };
   }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   AlertTriangle,
   Calculator,
@@ -19,6 +19,7 @@ import {
   UserRound,
   XCircle,
 } from 'lucide-react';
+import { useWorkspaceData } from '@/lib/use-workspace-data';
 import { AppHeader } from './app-header';
 
 type Region = 'nam' | 'trung' | 'bac';
@@ -103,18 +104,14 @@ const RATE_LABELS: Record<string, string> = {
 export function Dashboard() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const workspaceCache = useRef<Record<string, Workspace>>({});
-  const requestSeq = useRef(0);
+  const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [ticketText, setTicketText] = useState('');
   const [issueDrafts, setIssueDrafts] = useState<Record<string, string>>({});
   const [editingMessageId, setEditingMessageId] = useState('');
   const [editingText, setEditingText] = useState('');
-  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
   const activeIssues = useMemo(() => (workspace?.issues || []).filter(issue => issue.status === 'open'), [workspace]);
@@ -136,37 +133,15 @@ export function Dashboard() {
   const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
 
   useEffect(() => {
-    loadWorkspace({ targetDate: date, targetRegion: region });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, region]);
-
-  async function loadWorkspace(options?: { force?: boolean; targetDate?: string; targetRegion?: Region }) {
-    const queryDate = options?.targetDate || date;
-    const queryRegion = options?.targetRegion || region;
-    const cacheKey = `${queryDate}|${queryRegion}`;
-    if (!options?.force && workspaceCache.current[cacheKey]) {
-      setWorkspace(workspaceCache.current[cacheKey]);
+    const players = workspace?.players || [];
+    if (!players.length) {
+      if (selectedPlayerId) setSelectedPlayerId('');
+      return;
     }
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch(`/api/workspace?date=${queryDate}&region=${queryRegion}`, { cache: 'no-store' });
-      const payload = await response.json();
-      if (seq !== requestSeq.current) return;
-      if (!response.ok || !payload.ok) {
-        setError(payload.error || 'Không tải được dữ liệu.');
-        return;
-      }
-      workspaceCache.current[cacheKey] = payload as Workspace;
-      setWorkspace(payload as Workspace);
-      setSelectedPlayerId(current => current || payload.players?.[0]?.id || '');
-    } catch {
-      if (seq === requestSeq.current) setError('Không tải được dữ liệu.');
-    } finally {
-      if (seq === requestSeq.current) setLoading(false);
+    if (!selectedPlayerId || !players.some(player => player.id === selectedPlayerId)) {
+      setSelectedPlayerId(players[0].id);
     }
-  }
+  }, [selectedPlayerId, workspace?.players]);
 
   function submitTicket(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
