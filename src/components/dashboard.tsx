@@ -221,7 +221,12 @@ export function Dashboard() {
       mode: 'append',
     });
     if (!response.ok) return setError(response.error);
-    setNotice(response.issues?.length ? 'Đã thêm phần parse được, vẫn còn cảnh báo cần xem.' : 'Đã thêm dữ liệu sửa và đóng cảnh báo.');
+    setIssueDrafts(current => {
+      const next = { ...current };
+      delete next[issue.id];
+      return next;
+    });
+    setNotice(response.issues?.length ? `Đã thêm phần parse được, còn ${response.issues.length} tin cần sửa.` : 'OK, đã thêm dữ liệu sửa và đóng hộp tin cần sửa.');
     await loadWorkspace({ force: true });
   }
 
@@ -394,6 +399,35 @@ export function Dashboard() {
         </div>
 
         <aside className="sidebar-flow">
+          {activeIssues.length ? (
+            <section className="section issue-priority">
+              <div className="section-header">
+                <h2 className="section-title"><AlertTriangle size={18} /> Tin cần sửa</h2>
+                <span className="badge warn">{activeIssues.length}</span>
+              </div>
+              <div className="issue-list">
+                {activeIssues.map(issue => (
+                  <div className="issue-item open" key={issue.id}>
+                    <div className="issue-meta">
+                      <span>Tin {messageOrder.get(issue.ticket_message_id) || '?'} · Dòng {issue.line_no || '?'}</span>
+                      <span>{issue.status}</span>
+                    </div>
+                    <div className="issue-warning">{issue.warning}</div>
+                    <textarea
+                      className="textarea small"
+                      value={issueDrafts[issue.id] ?? issue.source_text ?? ''}
+                      onChange={event => setIssueDrafts(current => ({ ...current, [issue.id]: event.target.value }))}
+                    />
+                    <div className="row action-row">
+                      <button className="btn primary" type="button" onClick={() => reparseIssue(issue)}><RefreshCw size={16} /> Parse lại</button>
+                      <button className="btn soft" type="button" onClick={() => ignoreIssue(issue)}><XCircle size={16} /> Bỏ qua</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <section className="section">
             <div className="section-header">
               <h2 className="section-title"><UserRound size={18} /> Khách</h2>
@@ -405,36 +439,6 @@ export function Dashboard() {
             {activePlayer && workspace ? (
               <RatesEditor player={activePlayer} config={workspace.config} onSave={saveRates} onDelete={deletePlayer} />
             ) : <div className="empty-state compact">Chọn hoặc thêm khách để chỉnh hệ số.</div>}
-          </section>
-
-          <section className="section">
-            <div className="section-header">
-              <h2 className="section-title"><AlertTriangle size={18} /> Tin cần sửa</h2>
-              <span className="badge warn">{activeIssues.length}</span>
-            </div>
-            <div className="issue-list">
-              {filteredIssues.length ? filteredIssues.map(issue => (
-                <div className={`issue-item ${issue.status}`} key={issue.id}>
-                  <div className="issue-meta">
-                    <span>Tin {messageOrder.get(issue.ticket_message_id) || '?'} · Dòng {issue.line_no || '?'}</span>
-                    <span>{issue.status}</span>
-                  </div>
-                  <div className="issue-warning">{issue.warning}</div>
-                  <textarea
-                    className="textarea small"
-                    value={issueDrafts[issue.id] ?? issue.source_text ?? ''}
-                    disabled={issue.status !== 'open'}
-                    onChange={event => setIssueDrafts(current => ({ ...current, [issue.id]: event.target.value }))}
-                  />
-                  {issue.status === 'open' ? (
-                    <div className="row action-row">
-                      <button className="btn primary" type="button" onClick={() => reparseIssue(issue)}><RefreshCw size={16} /> Parse lại</button>
-                      <button className="btn soft" type="button" onClick={() => ignoreIssue(issue)}><XCircle size={16} /> Bỏ qua</button>
-                    </div>
-                  ) : null}
-                </div>
-              )) : <div className="empty-state compact">Không có tin lỗi.</div>}
-            </div>
           </section>
 
           <section className="section danger-zone">

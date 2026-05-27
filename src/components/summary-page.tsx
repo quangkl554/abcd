@@ -3,15 +3,19 @@
 import Link from 'next/link';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   BarChart3,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   FileText,
+  Gauge,
   ListChecks,
   RefreshCw,
+  Target,
   Trophy,
+  TrendingUp,
   UsersRound,
 } from 'lucide-react';
 import { useWorkspaceData } from '@/lib/use-workspace-data';
@@ -60,6 +64,24 @@ type MetricRow = {
   net: number;
 };
 
+type PlayerSummaryRow = {
+  playerId: string | null;
+  playerName: string;
+  soVe: number;
+  tongXac: number;
+  tongTrung: number;
+  laiLo: number;
+};
+
+type DashboardMetric = {
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'blue' | 'teal' | 'green' | 'amber';
+  icon: ReactNode;
+  percent: number;
+};
+
 const REGIONS: Array<{ id: RegionScope; label: string; short: string }> = [
   { id: 'all', label: 'Cả ngày', short: 'Cả ngày' },
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
@@ -86,9 +108,23 @@ export function SummaryPage() {
     win: tickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
     checked: tickets.filter(ticket => statusLabel(ticket) !== 'Chưa có KQ').length,
   }), [tickets]);
-  const byType = useMemo(() => groupTickets(tickets, ticket => ticket.loai_label || ticket.loai || 'Chưa rõ'), [tickets]);
   const byDai = useMemo(() => groupByDai(tickets), [tickets]);
   const byStatus = useMemo(() => groupTickets(tickets, statusLabel), [tickets]);
+  const topPlayers = useMemo(() => summaryRows.slice(0, 5), [summaryRows]);
+  const maxDaiXac = useMemo(() => Math.max(1, ...byDai.map(row => row.xac)), [byDai]);
+  const dashboardMetrics = useMemo<DashboardMetric[]>(() => {
+    const hitCount = tickets.filter(ticket => ticket.status === 'TRUNG' || Number(ticket.tien_thang || 0) > 0).length;
+    const checkedRate = totals.tickets ? Math.round((totals.checked / totals.tickets) * 100) : 0;
+    const hitRate = totals.checked ? Math.round((hitCount / totals.checked) * 100) : 0;
+    const payoutRate = totals.xac ? Math.round((totals.win / totals.xac) * 100) : 0;
+    const averageXac = totals.tickets ? totals.xac / totals.tickets : 0;
+    return [
+      { label: 'Đã dò', value: `${checkedRate}%`, detail: `${totals.checked}/${totals.tickets} vé`, tone: 'blue', icon: <Gauge size={18} />, percent: checkedRate },
+      { label: 'Tỷ lệ trúng', value: `${hitRate}%`, detail: `${hitCount} vé trúng`, tone: 'green', icon: <Target size={18} />, percent: hitRate },
+      { label: 'Trả thưởng', value: `${payoutRate}%`, detail: 'thắng / xác', tone: 'teal', icon: <TrendingUp size={18} />, percent: Math.min(payoutRate, 100) },
+      { label: 'Xác trung bình', value: money(averageXac), detail: 'mỗi vé', tone: 'amber', icon: <Activity size={18} />, percent: totals.tickets ? 72 : 0 },
+    ];
+  }, [tickets, totals.checked, totals.tickets, totals.win, totals.xac]);
 
   useEffect(() => {
     if (selectedPlayerId === 'all') return;
@@ -156,8 +192,8 @@ export function SummaryPage() {
                 </div>
                 <span>Vé</span><span>Xác</span><span>Thắng</span><span>Lãi lỗ</span>
               </div>
-              {summaryRows.map(row => (
-                <div className="summary-table-row" key={row.playerId || row.playerName}>
+              {summaryRows.map((row, index) => (
+                <div className={`summary-table-row ${index < 3 ? 'highlight' : ''}`} key={row.playerId || row.playerName}>
                   <b className="summary-player-name">{row.playerName}</b>
                   <span>{row.soVe}</span>
                   <span>{money(row.tongXac)}</span>
@@ -169,20 +205,92 @@ export function SummaryPage() {
             </div>
           </section>
 
-          <div className="analytics-grid">
-            <StatsSection title="Theo loại vé" icon={<BarChart3 size={18} />} rows={byType} />
-            <StatsSection title="Theo đài" icon={<CircleDollarSign size={18} />} rows={byDai} />
-            <StatsSection title="Trạng thái dò" icon={<Trophy size={18} />} rows={byStatus} />
-            <section className="section">
+          <div className="dashboard-grid">
+            <section className="section dashboard-overview">
               <div className="section-header">
-                <h2 className="section-title"><BarChart3 size={18} /> Chỉ số mở rộng</h2>
+                <div>
+                  <h2 className="section-title"><BarChart3 size={18} /> Dashboard tổng hợp</h2>
+                  <p className="section-note">Theo ngày, miền và khách đang chọn.</p>
+                </div>
               </div>
-              <div className="empty-state compact">Chưa cấu hình thống kê nâng cao.</div>
+              <div className="dashboard-card-grid">
+                {dashboardMetrics.map(metric => <DashboardCard metric={metric} key={metric.label} />)}
+              </div>
             </section>
+            <VisualBarSection title="Phân bổ theo đài" icon={<CircleDollarSign size={18} />} rows={byDai} maxXac={maxDaiXac} />
+            <StatsSection title="Trạng thái dò" icon={<Trophy size={18} />} rows={byStatus} />
+            <PlayerBoard rows={topPlayers} />
           </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function DashboardCard({ metric }: { metric: DashboardMetric }) {
+  return (
+    <div className={`dashboard-card tone-${metric.tone}`}>
+      <div className="dashboard-card-title">
+        {metric.icon}
+        <span>{metric.label}</span>
+      </div>
+      <strong>{metric.value}</strong>
+      <small>{metric.detail}</small>
+      <div className="dashboard-progress" aria-hidden="true">
+        <span style={{ width: `${clampPercent(metric.percent)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function VisualBarSection({ title, icon, rows, maxXac }: { title: string; icon: ReactNode; rows: MetricRow[]; maxXac: number }) {
+  return (
+    <section className="section dashboard-panel">
+      <div className="section-header">
+        <h2 className="section-title">{icon}{title}</h2>
+      </div>
+      <div className="visual-list">
+        {rows.slice(0, 8).map(row => (
+          <div className="visual-row" key={row.label}>
+            <div className="visual-row-head">
+              <b>{row.label}</b>
+              <span>{row.count} vé</span>
+            </div>
+            <div className="visual-bar" aria-hidden="true">
+              <span style={{ width: `${clampPercent((row.xac / maxXac) * 100)}%` }} />
+            </div>
+            <div className="visual-row-foot">
+              <span>xác {money(row.xac)}</span>
+              <strong className={row.net >= 0 ? 'positive' : 'negative'}>{money(row.net)}</strong>
+            </div>
+          </div>
+        ))}
+        {!rows.length ? <div className="empty-state compact">Chưa có dữ liệu.</div> : null}
+      </div>
+    </section>
+  );
+}
+
+function PlayerBoard({ rows }: { rows: PlayerSummaryRow[] }) {
+  return (
+    <section className="section dashboard-panel">
+      <div className="section-header">
+        <h2 className="section-title"><UsersRound size={18} /> Khách nổi bật</h2>
+      </div>
+      <div className="leader-list">
+        {rows.map((row, index) => (
+          <div className="leader-row" key={row.playerId || row.playerName}>
+            <span className="rank-chip">{index + 1}</span>
+            <div>
+              <b>{row.playerName}</b>
+              <small>{row.soVe} vé · xác {money(row.tongXac)}</small>
+            </div>
+            <strong className={row.laiLo >= 0 ? 'positive' : 'negative'}>{money(row.laiLo)}</strong>
+          </div>
+        ))}
+        {!rows.length ? <div className="empty-state compact">Chưa có dữ liệu.</div> : null}
+      </div>
+    </section>
   );
 }
 
@@ -220,7 +328,7 @@ function groupTickets(tickets: Ticket[], getLabel: (ticket: Ticket) => string) {
 }
 
 function groupByPlayer(tickets: Ticket[]) {
-  const rows = new Map<string, { playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>();
+  const rows = new Map<string, PlayerSummaryRow>();
   for (const ticket of tickets) {
     const key = ticket.player_id || ticket.player_name || 'Khach';
     const row = rows.get(key) || { playerId: ticket.player_id || null, playerName: ticket.player_name || 'Khach', soVe: 0, tongXac: 0, tongTrung: 0, laiLo: 0 };
@@ -264,6 +372,11 @@ function statusLabel(ticket: Ticket) {
 
 function money(value: number) {
   return Math.round(Number(value || 0)).toLocaleString('vi-VN');
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 function todayKey() {
