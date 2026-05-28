@@ -67,10 +67,8 @@ export function ResultsPage() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
   const [autoFetchResults, setAutoFetchResults] = useState(true);
-  const workspaceParams = useMemo(() => ({ autoFetch: autoFetchResults ? 1 : 0 }), [autoFetchResults]);
   const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region, {
     endpoint: 'results',
-    params: workspaceParams,
   });
   const autoFetchKey = useRef('');
   const [manualKq, setManualKq] = useState('');

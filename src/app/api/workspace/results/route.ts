@@ -4,7 +4,6 @@ import { type Region } from '@/lib/core';
 import { jsonError, jsonOk } from '@/lib/http';
 import { dateSchema, regionSchema } from '@/lib/validation';
 import { groupByPlayer, regionConfig, summarizeTickets } from '@/lib/workspace-server';
-import { fetchAndStoreDrawResults } from '@/lib/draw-results-store';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +13,6 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const date = dateSchema.parse(url.searchParams.get('date'));
     const region = regionSchema.parse(url.searchParams.get('region')) as Region;
-    const autoFetch = url.searchParams.get('autoFetch') === '1';
 
     const [tickets, initialDrawResults] = await Promise.all([
       supabase
@@ -36,14 +34,7 @@ export async function GET(request: NextRequest) {
     if (initialDrawResults.error) throw initialDrawResults.error;
 
     const ticketRows = tickets.data || [];
-    let drawResults = initialDrawResults.data || [];
-    let autoFetchResult: Awaited<ReturnType<typeof fetchAndStoreDrawResults>> | null = null;
-    if (autoFetch && !drawResults.length) {
-      autoFetchResult = await fetchAndStoreDrawResults({ supabase, ownerId: user.id, date, region });
-      if (autoFetchResult.ok) {
-        drawResults = autoFetchResult.drawResults || [];
-      }
-    }
+    const drawResults = initialDrawResults.data || [];
 
     return jsonOk({
       profile,
@@ -51,10 +42,10 @@ export async function GET(request: NextRequest) {
       drawResults,
       totals: summarizeTickets(ticketRows),
       summary: groupByPlayer(ticketRows),
-      autoFetchAttempted: Boolean(autoFetchResult),
-      needsManual: autoFetchResult ? !autoFetchResult.ok : false,
-      fetchReason: autoFetchResult && !autoFetchResult.ok ? autoFetchResult.reason : '',
-      sourceAttempts: autoFetchResult?.sourceAttempts || [],
+      autoFetchAttempted: false,
+      needsManual: false,
+      fetchReason: '',
+      sourceAttempts: [],
     });
   } catch (error) {
     const mapped = authErrorResponse(error);

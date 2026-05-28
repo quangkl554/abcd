@@ -100,12 +100,18 @@ export function summaryConfig(region: RegionScope, date: string) {
   };
 }
 
-export function attachTicketSourceLines<TTicket extends TicketLike>(tickets: TTicket[], messages: MessageLike[]) {
+export function attachTicketSourceLines<TTicket extends TicketLike & { source_line_no?: number | null }>(
+  tickets: TTicket[],
+  messages: MessageLike[],
+) {
   const messageRaw = new Map(messages.map(message => [message.id, message.raw_text || '']));
-  return tickets.map(ticket => ({
-    ...ticket,
-    source_line_no: ticketSourceLine(ticket, messageRaw.get(ticket.ticket_message_id || '') || ''),
-  }));
+  return tickets.map(ticket => {
+    if (typeof ticket.source_line_no === 'number') return ticket;
+    return {
+      ...ticket,
+      source_line_no: ticketSourceLine(ticket, messageRaw.get((ticket as TicketLike & { ticket_message_id?: string }).ticket_message_id || '') || ''),
+    };
+  });
 }
 
 export function summarizeTickets(tickets: TicketLike[]): TicketTotals {
@@ -170,12 +176,13 @@ export function playerSummaryFromDaily(rows: DailySummaryLike[]) {
   return [...grouped.values()].sort((a, b) => Math.abs(b.laiLo) - Math.abs(a.laiLo));
 }
 
-export function totalsFromPlayerSummary(rows: PlayerSummaryRow[], ticketStats: TicketLike[] = []) {
+export function totalsFromPlayerSummary(rows: PlayerSummaryRow[], ticketStats: TicketLike[] | TicketStatCounts = []) {
   const tickets = rows.reduce((sum, row) => sum + numberValue(row.soVe), 0);
   const xac = rows.reduce((sum, row) => sum + numberValue(row.tongXac), 0);
   const win = rows.reduce((sum, row) => sum + numberValue(row.tongTrung), 0);
-  const checked = ticketStats.length ? ticketStats.filter(isChecked).length : 0;
-  const hitCount = ticketStats.length ? ticketStats.filter(isHit).length : 0;
+  const stats = Array.isArray(ticketStats) ? summarizeTickets(ticketStats) : ticketStats;
+  const checked = stats.checked || 0;
+  const hitCount = stats.hitCount || 0;
   return {
     tickets,
     checked,
@@ -245,6 +252,76 @@ export function filterTicketsByPlayer<TTicket extends TicketLike>(
   return tickets.filter(ticket => ticket.player_id === playerId || (!ticket.player_id && player && ticket.player_name === player.name));
 }
 
+export type PlayerScope = {
+  playerId?: string;
+  playerName?: string;
+};
+
+export function resolvePlayerScope(
+  players: Array<{ id: string; name: string }>,
+  playerId?: string | null,
+): PlayerScope {
+  if (!playerId) return {};
+  const player = players.find(item => item.id === playerId);
+  return { playerId, playerName: player?.name };
+}
+
+export function applyTicketPlayerFilter(query: any, scope: PlayerScope) {
+  if (!scope.playerId) return query;
+  if (scope.playerName) {
+    return query.or(`player_id.eq.${scope.playerId},and(player_id.is.null,player_name.eq.${quotePostgrestValue(scope.playerName)})`);
+  }
+  return query.eq('player_id', scope.playerId);
+}
+
+export type TicketStatCounts = {
+  checked: number;
+  hitCount: number;
+};
+
+export async function fetchTicketStatCounts(
+  supabase: { from: (table: string) => any },
+  ownerId: string,
+  date: string,
+  region: RegionScope,
+  scope: PlayerScope = {},
+): Promise<TicketStatCounts> {
+  let checkedQuery = supabase
+    .from('tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_id', ownerId)
+    .eq('message_date', date)
+    .or('tien_thang.gt.0,and(status.neq.Chua co KQ,status.neq.?)');
+
+  let hitQuery = supabase
+    .from('tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_id', ownerId)
+    .eq('message_date', date)
+    .or('status.eq.TRUNG,tien_thang.gt.0');
+
+  if (region !== 'all') {
+    checkedQuery = checkedQuery.eq('region', region);
+    hitQuery = hitQuery.eq('region', region);
+  }
+
+  checkedQuery = applyTicketPlayerFilter(checkedQuery, scope);
+  hitQuery = applyTicketPlayerFilter(hitQuery, scope);
+
+  const [checkedResult, hitResult] = await Promise.all([checkedQuery, hitQuery]);
+  if (checkedResult.error) throw checkedResult.error;
+  if (hitResult.error) throw hitResult.error;
+
+  return {
+    checked: checkedResult.count || 0,
+    hitCount: hitResult.count || 0,
+  };
+}
+
+export function computeSourceLineNo(sourceText: string, rawText: string) {
+  return ticketSourceLine({ source_text: sourceText }, rawText);
+}
+
 function addMetric(rows: Map<string, MetricRow>, label: string, ticket: TicketLike, share = 1) {
   const row = rows.get(label) || { label, count: 0, xac: 0, win: 0, net: 0 };
   row.count += 1;
@@ -291,4 +368,8 @@ function normalizeTicketLine(value: string) {
 
 function numberValue(value: unknown) {
   return Number(value || 0);
+}
+
+function quotePostgrestValue(value: string) {
+  return `"${String(value).replace(/"/g, '""')}"`;
 }

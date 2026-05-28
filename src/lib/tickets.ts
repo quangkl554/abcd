@@ -5,6 +5,7 @@ export function serializeTicket(ticket: ParsedTicket, context: {
   messageId: string;
   date: string;
   playerId: string | null;
+  sourceLineNo?: number | null;
 }) {
   return {
     owner_id: context.ownerId,
@@ -24,6 +25,7 @@ export function serializeTicket(ticket: ParsedTicket, context: {
     ty_le_trung: ticket.tyLeTrung || 0,
     xac: ticket.xac || 0,
     source_text: ticket.sourceText || '',
+    source_line_no: context.sourceLineNo ?? null,
     status: mapStatus(ticket.ketQua || '?'),
     tien_thang: ticket.tienThang || 0,
     ghi_chu: ticket.ghiChu || '',

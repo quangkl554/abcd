@@ -23,14 +23,14 @@ export async function GET(request: NextRequest) {
         .order('name'),
       supabase
         .from('ticket_messages')
-        .select('id,created_at,player_id,player_name,raw_text')
+        .select('id,created_at,player_id,player_name')
         .eq('owner_id', user.id)
         .eq('message_date', date)
         .eq('region', region)
         .order('created_at', { ascending: false }),
       supabase
         .from('tickets')
-        .select('id,ticket_message_id,player_id,player_name,dai,loai,loai_label,so_list,tien_dat,xac,status,tien_thang,ghi_chu,source_text,created_at')
+        .select('id,ticket_message_id,player_id,player_name,dai,loai,loai_label,so_list,tien_dat,xac,status,tien_thang,ghi_chu,source_text,source_line_no,created_at')
         .eq('owner_id', user.id)
         .eq('message_date', date)
         .eq('region', region)
@@ -48,16 +48,31 @@ export async function GET(request: NextRequest) {
       if (result.error) throw result.error;
     }
 
-    const ticketRows = attachTicketSourceLines(tickets.data || [], messages.data || []);
+    const ticketRows = tickets.data || [];
+    const needsSourceLine = ticketRows.some(ticket => ticket.source_line_no == null);
+    const messageRows = needsSourceLine
+      ? await supabase
+        .from('ticket_messages')
+        .select('id,raw_text')
+        .eq('owner_id', user.id)
+        .eq('message_date', date)
+        .eq('region', region)
+      : { data: [], error: null };
+
+    if (messageRows.error) throw messageRows.error;
+
+    const hydratedTickets = needsSourceLine
+      ? attachTicketSourceLines(ticketRows, messageRows.data || [])
+      : ticketRows;
 
     return jsonOk({
       profile,
       config: regionConfig(region, date),
       players: players.data || [],
-      messages: (messages.data || []).map(({ raw_text: _rawText, ...message }) => message),
-      tickets: ticketRows,
+      messages: messages.data || [],
+      tickets: hydratedTickets,
       issues: issues.data || [],
-      summary: groupByPlayer(ticketRows),
+      summary: groupByPlayer(hydratedTickets),
     });
   } catch (error) {
     const mapped = authErrorResponse(error);

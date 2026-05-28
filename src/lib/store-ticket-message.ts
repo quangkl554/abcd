@@ -2,6 +2,7 @@ import { issueDraftsFromWarnings } from './issues';
 import { canonicalRegion, parseEnvelope, type Region } from './core';
 import { parseWorkDate } from './dates';
 import { serializeTicket } from './tickets';
+import { computeSourceLineNo } from './workspace-server';
 
 type SupabaseLike = any;
 
@@ -47,6 +48,7 @@ export async function parseAndStoreTicketMessage(args: {
     messageId: message.id,
     date: args.date,
     playerId,
+    sourceLineNo: computeSourceLineNo(ticket.sourceText || '', args.text),
   }));
 
   let tickets: any[] = [];
@@ -172,6 +174,7 @@ export async function reparseTicketMessage(args: {
     messageId: args.messageId,
     date: message.message_date,
     playerId,
+    sourceLineNo: computeSourceLineNo(ticket.sourceText || '', nextRawText),
   }));
 
   if (mode === 'append' && replacedSourceTexts.size) {
