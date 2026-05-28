@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BarChart3,
@@ -30,19 +30,6 @@ type Player = {
   active: boolean;
 };
 
-type Ticket = {
-  id: string;
-  player_id: string | null;
-  player_name: string;
-  region?: Region;
-  dai: string[];
-  loai: string;
-  loai_label: string;
-  status: string;
-  xac: number;
-  tien_thang: number;
-};
-
 type Workspace = {
   profile: { username: string; role: 'admin' | 'user' };
   config: {
@@ -51,9 +38,30 @@ type Workspace = {
     activeDai: string[];
   };
   players: Player[];
-  tickets: Ticket[];
-  drawResults: Array<{ id: string; dai: string }>;
-  summary: Array<{ playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
+  totals: TicketTotals;
+  summary: PlayerSummaryRow[];
+  topPlayers: PlayerSummaryRow[];
+  byDai?: MetricRow[];
+  byRegion: MetricRow[];
+};
+
+type DetailsWorkspace = {
+  byDai: MetricRow[];
+  byStatus: MetricRow[];
+  byType: MetricRow[];
+};
+
+type TicketTotals = {
+  tickets: number;
+  checked: number;
+  hitCount: number;
+  xac: number;
+  win: number;
+  net: number;
+  averageXac: number;
+  checkedRate: number;
+  hitRate: number;
+  payoutRate: number;
 };
 
 type MetricRow = {
@@ -93,45 +101,69 @@ export function SummaryPage() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<RegionScope>('all');
   const [selectedPlayerId, setSelectedPlayerId] = useState('all');
-  const { workspace, loading, error, loadWorkspace } = useWorkspaceData<Workspace>(date, region);
+  const [dashboardVisible, setDashboardVisible] = useState(false);
+  const dashboardRef = useRef<HTMLDivElement | null>(null);
+  const workspaceParams = useMemo(() => (
+    selectedPlayerId === 'all' ? { section: 'overview' } : { section: 'overview', playerId: selectedPlayerId }
+  ), [selectedPlayerId]);
+  const { workspace, loading, error, loadWorkspace } = useWorkspaceData<Workspace>(date, region, {
+    endpoint: 'summary',
+    params: workspaceParams,
+  });
+  const detailsParams = useMemo(() => (
+    selectedPlayerId === 'all' ? { section: 'details' } : { section: 'details', playerId: selectedPlayerId }
+  ), [selectedPlayerId]);
+  const { workspace: details, loading: detailsLoading, loadWorkspace: loadDetails } = useWorkspaceData<DetailsWorkspace>(date, region, {
+    endpoint: 'summary',
+    params: detailsParams,
+    enabled: dashboardVisible,
+  });
 
-  const tickets = useMemo(() => {
-    const rows = workspace?.tickets || [];
-    if (selectedPlayerId === 'all') return rows;
-    const player = workspace?.players.find(item => item.id === selectedPlayerId);
-    return rows.filter(ticket => ticket.player_id === selectedPlayerId || (!ticket.player_id && player && ticket.player_name === player.name));
-  }, [selectedPlayerId, workspace?.players, workspace?.tickets]);
-  const summaryRows = useMemo(() => groupByPlayer(tickets), [tickets]);
-  const totals = useMemo(() => ({
-    tickets: tickets.length,
-    xac: tickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
-    win: tickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
-    checked: tickets.filter(ticket => statusLabel(ticket) !== 'Chưa có KQ').length,
-  }), [tickets]);
-  const byDai = useMemo(() => groupByDai(tickets), [tickets]);
-  const byStatus = useMemo(() => groupTickets(tickets, statusLabel), [tickets]);
-  const topPlayers = useMemo(() => summaryRows.slice(0, 5), [summaryRows]);
-  const maxDaiXac = useMemo(() => Math.max(1, ...byDai.map(row => row.xac)), [byDai]);
+  const summaryRows = workspace?.summary || [];
+  const totals = workspace?.totals || emptyTotals();
+  const byDai = details?.byDai || [];
+  const byRegion = workspace?.byRegion || [];
+  const byStatus = details?.byStatus || [];
+  const byType = details?.byType || [];
+  const topPlayers = workspace?.topPlayers || [];
+  const visualRows = region === 'all' ? byRegion : byDai;
+  const maxVisualXac = useMemo(() => Math.max(1, ...visualRows.map(row => row.xac)), [visualRows]);
+  const conclusion = useMemo(() => buildConclusion(totals, region, visualRows, byType, detailsLoading), [byType, detailsLoading, region, totals, visualRows]);
   const dashboardMetrics = useMemo<DashboardMetric[]>(() => {
-    const hitCount = tickets.filter(ticket => ticket.status === 'TRUNG' || Number(ticket.tien_thang || 0) > 0).length;
-    const checkedRate = totals.tickets ? Math.round((totals.checked / totals.tickets) * 100) : 0;
-    const hitRate = totals.checked ? Math.round((hitCount / totals.checked) * 100) : 0;
-    const payoutRate = totals.xac ? Math.round((totals.win / totals.xac) * 100) : 0;
-    const averageXac = totals.tickets ? totals.xac / totals.tickets : 0;
-    return [
-      { label: 'Đã dò', value: `${checkedRate}%`, detail: `${totals.checked}/${totals.tickets} vé`, tone: 'blue', icon: <Gauge size={18} />, percent: checkedRate },
-      { label: 'Tỷ lệ trúng', value: `${hitRate}%`, detail: `${hitCount} vé trúng`, tone: 'green', icon: <Target size={18} />, percent: hitRate },
-      { label: 'Trả thưởng', value: `${payoutRate}%`, detail: 'thắng / xác', tone: 'teal', icon: <TrendingUp size={18} />, percent: Math.min(payoutRate, 100) },
-      { label: 'Xác trung bình', value: money(averageXac), detail: 'mỗi vé', tone: 'amber', icon: <Activity size={18} />, percent: totals.tickets ? 72 : 0 },
-    ];
-  }, [tickets, totals.checked, totals.tickets, totals.win, totals.xac]);
+    return region === 'all'
+      ? buildDailyDashboardMetrics(totals, byRegion)
+      : buildRegionDashboardMetrics(totals, byDai);
+  }, [byDai, byRegion, region, totals]);
 
   useEffect(() => {
     if (selectedPlayerId === 'all') return;
+    if (!workspace) return;
     if (!workspace?.players.some(player => player.id === selectedPlayerId)) {
       setSelectedPlayerId('all');
     }
   }, [selectedPlayerId, workspace?.players]);
+
+  useEffect(() => {
+    if (dashboardVisible) return;
+    const node = dashboardRef.current;
+    if (!node || !('IntersectionObserver' in window)) {
+      setDashboardVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setDashboardVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '220px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [dashboardVisible]);
+
+  function refreshSummary() {
+    void loadWorkspace({ force: true });
+    if (dashboardVisible) void loadDetails({ force: true });
+  }
 
   return (
     <main className="app-shell">
@@ -157,7 +189,7 @@ export function SummaryPage() {
               ))}
             </div>
             <div className="control-actions">
-              <button className="btn soft" type="button" onClick={() => loadWorkspace({ force: true })}><RefreshCw size={17} className={loading ? 'spin' : ''} /> Tải lại</button>
+              <button className="btn soft" type="button" onClick={refreshSummary}><RefreshCw size={17} className={loading || detailsLoading ? 'spin' : ''} /> Tải lại</button>
               <Link className="btn soft" href="/app"><FileText size={17} /> Vé</Link>
               <Link className="btn soft" href="/results"><ListChecks size={17} /> Kết quả</Link>
             </div>
@@ -205,20 +237,22 @@ export function SummaryPage() {
             </div>
           </section>
 
-          <div className="dashboard-grid">
+          <div className="dashboard-grid" ref={dashboardRef}>
             <section className="section dashboard-overview">
               <div className="section-header">
                 <div>
-                  <h2 className="section-title"><BarChart3 size={18} /> Dashboard tổng hợp</h2>
-                  <p className="section-note">Theo ngày, miền và khách đang chọn.</p>
+                  <h2 className="section-title"><BarChart3 size={18} /> {region === 'all' ? 'Dashboard cả ngày' : `Dashboard ${regionName(region)}`}</h2>
+                  <p className="section-note">{region === 'all' ? 'Tổng kết toàn bộ Nam, Trung, Bắc trong ngày và khách đang chọn.' : 'Thống kê riêng cho miền và khách đang chọn.'}</p>
                 </div>
+                {detailsLoading ? <span className="loading-chip inline"><RefreshCw size={14} className="spin" /> Đang tải chi tiết</span> : null}
               </div>
               <div className="dashboard-card-grid">
                 {dashboardMetrics.map(metric => <DashboardCard metric={metric} key={metric.label} />)}
               </div>
+              <InsightStrip text={conclusion} />
             </section>
-            <VisualBarSection title="Phân bổ theo đài" icon={<CircleDollarSign size={18} />} rows={byDai} maxXac={maxDaiXac} />
-            <StatsSection title="Trạng thái dò" icon={<Trophy size={18} />} rows={byStatus} />
+            <VisualBarSection title={region === 'all' ? 'Phân bổ theo miền' : 'Phân bổ theo đài'} icon={<CircleDollarSign size={18} />} rows={visualRows} maxXac={maxVisualXac} />
+            <StatsSection title={region === 'all' ? 'Trạng thái cả ngày' : 'Loại vé nổi bật'} icon={region === 'all' ? <Trophy size={18} /> : <Target size={18} />} rows={region === 'all' ? byStatus : byType} />
             <PlayerBoard rows={topPlayers} />
           </div>
         </div>
@@ -239,6 +273,15 @@ function DashboardCard({ metric }: { metric: DashboardMetric }) {
       <div className="dashboard-progress" aria-hidden="true">
         <span style={{ width: `${clampPercent(metric.percent)}%` }} />
       </div>
+    </div>
+  );
+}
+
+function InsightStrip({ text }: { text: string }) {
+  return (
+    <div className="dashboard-insight">
+      <b>Kết luận nhanh</b>
+      <span>{text}</span>
     </div>
   );
 }
@@ -319,55 +362,65 @@ function StatsSection({ title, icon, rows }: { title: string; icon: ReactNode; r
   );
 }
 
-function groupTickets(tickets: Ticket[], getLabel: (ticket: Ticket) => string) {
-  const rows = new Map<string, MetricRow>();
-  for (const ticket of tickets) {
-    addMetric(rows, getLabel(ticket), ticket);
-  }
-  return sortRows(rows);
+function buildDailyDashboardMetrics(totals: TicketTotals, byRegion: MetricRow[]): DashboardMetric[] {
+  const highestXacRegion = topBy(byRegion, row => row.xac);
+  const netRate = totals.xac ? Math.round((totals.net / totals.xac) * 100) : 0;
+  return [
+    { label: 'Biên lãi/lỗ', value: `${netRate}%`, detail: money(totals.net), tone: totals.net >= 0 ? 'green' : 'amber', icon: <Gauge size={18} />, percent: Math.abs(netRate) },
+    { label: 'Tỷ lệ trả', value: `${totals.payoutRate}%`, detail: `${money(totals.win)} / ${money(totals.xac)}`, tone: 'teal', icon: <TrendingUp size={18} />, percent: Math.min(totals.payoutRate, 100) },
+    { label: 'Tỷ lệ trúng', value: `${totals.hitRate}%`, detail: `${totals.hitCount}/${totals.checked || totals.tickets} vé đã dò`, tone: 'green', icon: <Target size={18} />, percent: totals.hitRate },
+    { label: 'Miền nhiều xác', value: highestXacRegion?.label || '-', detail: highestXacRegion ? `${money(highestXacRegion.xac)} · ${percentOf(highestXacRegion.xac, totals.xac)}%` : 'chưa có dữ liệu', tone: 'blue', icon: <Activity size={18} />, percent: percentOf(highestXacRegion?.xac || 0, totals.xac) },
+  ];
 }
 
-function groupByPlayer(tickets: Ticket[]) {
-  const rows = new Map<string, PlayerSummaryRow>();
-  for (const ticket of tickets) {
-    const key = ticket.player_id || ticket.player_name || 'Khach';
-    const row = rows.get(key) || { playerId: ticket.player_id || null, playerName: ticket.player_name || 'Khach', soVe: 0, tongXac: 0, tongTrung: 0, laiLo: 0 };
-    row.soVe += 1;
-    row.tongXac += Number(ticket.xac || 0);
-    row.tongTrung += Number(ticket.tien_thang || 0);
-    row.laiLo = row.tongTrung - row.tongXac;
-    rows.set(key, row);
-  }
-  return [...rows.values()].sort((a, b) => Math.abs(b.laiLo) - Math.abs(a.laiLo));
+function buildRegionDashboardMetrics(totals: TicketTotals, byDai: MetricRow[]): DashboardMetric[] {
+  const highestXacDai = topBy(byDai, row => row.xac);
+  const netRate = totals.xac ? Math.round((totals.net / totals.xac) * 100) : 0;
+  return [
+    { label: 'Biên lãi/lỗ', value: `${netRate}%`, detail: money(totals.net), tone: totals.net >= 0 ? 'green' : 'amber', icon: <Gauge size={18} />, percent: Math.abs(netRate) },
+    { label: 'Tỷ lệ trả', value: `${totals.payoutRate}%`, detail: `${money(totals.win)} / ${money(totals.xac)}`, tone: 'teal', icon: <TrendingUp size={18} />, percent: Math.min(totals.payoutRate, 100) },
+    { label: 'Tỷ lệ trúng', value: `${totals.hitRate}%`, detail: `${totals.hitCount}/${totals.checked || totals.tickets} vé đã dò`, tone: 'green', icon: <Target size={18} />, percent: totals.hitRate },
+    { label: 'Đài nhiều xác', value: highestXacDai?.label || '-', detail: highestXacDai ? `${money(highestXacDai.xac)} · ${percentOf(highestXacDai.xac, totals.xac)}%` : 'đang tải chi tiết', tone: 'blue', icon: <Activity size={18} />, percent: percentOf(highestXacDai?.xac || 0, totals.xac) },
+  ];
 }
 
-function groupByDai(tickets: Ticket[]) {
-  const rows = new Map<string, MetricRow>();
-  for (const ticket of tickets) {
-    const dais = ticket.dai?.length ? ticket.dai : ['Chưa rõ'];
-    const share = 1 / dais.length;
-    for (const dai of dais) addMetric(rows, dai, ticket, share);
-  }
-  return sortRows(rows);
+function buildConclusion(totals: TicketTotals, region: RegionScope, visualRows: MetricRow[], byType: MetricRow[], detailsLoading: boolean) {
+  if (!totals.tickets) return 'Chưa có vé trong phạm vi đang chọn.';
+  const netWord = totals.net >= 0 ? 'lãi' : 'âm';
+  const netRate = totals.xac ? Math.round((totals.net / totals.xac) * 100) : 0;
+  const strongestArea = topBy(visualRows, row => row.xac);
+  const topType = topBy(byType, row => row.xac);
+  const areaText = strongestArea
+    ? `${region === 'all' ? 'Miền' : 'Đài'} tập trung xác nhiều nhất là ${strongestArea.label} (${money(strongestArea.xac)}, ${percentOf(strongestArea.xac, totals.xac)}%).`
+    : detailsLoading ? 'Đang tải phân bổ chi tiết.' : 'Chưa có phân bổ chi tiết.';
+  const typeText = region !== 'all' && topType ? ` Loại vé nặng nhất là ${topType.label} (${money(topType.xac)}).` : '';
+  return `Phạm vi này đang ${netWord} ${money(Math.abs(totals.net))} (${netRate}%). Tỷ lệ trả ${totals.payoutRate}%, trúng ${totals.hitCount}/${totals.checked || totals.tickets} vé đã dò. ${areaText}${typeText}`;
 }
 
-function addMetric(rows: Map<string, MetricRow>, label: string, ticket: Ticket, share = 1) {
-  const row = rows.get(label) || { label, count: 0, xac: 0, win: 0, net: 0 };
-  row.count += 1;
-  row.xac += Number(ticket.xac || 0) * share;
-  row.win += Number(ticket.tien_thang || 0) * share;
-  row.net = row.win - row.xac;
-  rows.set(label, row);
+function emptyTotals(): TicketTotals {
+  return {
+    tickets: 0,
+    checked: 0,
+    hitCount: 0,
+    xac: 0,
+    win: 0,
+    net: 0,
+    averageXac: 0,
+    checkedRate: 0,
+    hitRate: 0,
+    payoutRate: 0,
+  };
 }
 
-function sortRows(rows: Map<string, MetricRow>) {
-  return [...rows.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+function topBy<T>(rows: T[], getValue: (row: T) => number) {
+  return rows.reduce<T | undefined>((best, row) => {
+    if (!best || getValue(row) > getValue(best)) return row;
+    return best;
+  }, undefined);
 }
 
-function statusLabel(ticket: Ticket) {
-  if (ticket.status === 'TRUNG' || Number(ticket.tien_thang || 0) > 0) return 'Trúng';
-  if (ticket.status === 'Truot') return 'Trượt';
-  return 'Chưa có KQ';
+function percentOf(value: number, total: number) {
+  return total ? Math.round((value / total) * 100) : 0;
 }
 
 function money(value: number) {

@@ -579,6 +579,11 @@ p {
   font-weight: 900;
 }
 
+.loading-chip.inline {
+  position: static;
+  box-shadow: none;
+}
+
 .spin {
   animation: spin 780ms linear infinite;
 }
@@ -1185,6 +1190,28 @@ tr:hover td {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.dashboard-insight {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--line));
+  border-left: 4px solid var(--blue);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blue) 8%, var(--panel));
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.dashboard-insight b {
+  font-size: 13px;
+}
+
+.dashboard-insight span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .dashboard-card {

@@ -46,6 +46,7 @@ type Ticket = {
   tien_thang: number;
   ghi_chu: string;
   source_text: string;
+  source_line_no?: number | null;
 };
 
 type ParseIssue = {
@@ -62,7 +63,7 @@ type TicketMessage = {
   created_at: string;
   player_id: string | null;
   player_name: string | null;
-  raw_text: string;
+  raw_text?: string;
 };
 
 type Workspace = {
@@ -81,7 +82,6 @@ type Workspace = {
   messages: TicketMessage[];
   tickets: Ticket[];
   issues: ParseIssue[];
-  drawResults: Array<{ id: string; dai: string; source: string; prizes: Record<string, string[]> }>;
   summary: Array<{ playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
 };
 
@@ -113,7 +113,7 @@ const RATE_LABELS: Record<string, string> = {
 export function Dashboard() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
-  const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region);
+  const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region, { endpoint: 'app' });
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [ticketText, setTicketText] = useState('');
@@ -665,6 +665,7 @@ function normalizeSourceToken(token: string) {
 }
 
 function ticketSourceLine(ticket: Ticket, messages: TicketMessage[]) {
+  if (typeof ticket.source_line_no === 'number') return ticket.source_line_no;
   const message = messages.find(item => item.id === ticket.ticket_message_id);
   if (!message?.raw_text || !ticket.source_text) return null;
   const source = normalizeTicketLine(ticket.source_text);

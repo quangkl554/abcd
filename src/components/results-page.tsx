@@ -25,8 +25,12 @@ type Workspace = {
     resultSourceUrls: string[];
   };
   drawResults: DrawResult[];
-  tickets: Array<{ id: string; status: string; tien_thang: number; xac: number }>;
+  totals: { tickets: number; checked: number; xac: number; win: number };
   summary: Array<{ playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
+  autoFetchAttempted?: boolean;
+  needsManual?: boolean;
+  fetchReason?: string;
+  sourceAttempts?: Array<{ source: string; ok: boolean; reason?: string }>;
 };
 
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
@@ -62,22 +66,20 @@ const SAMPLE_BY_REGION: Record<Region, string> = {
 export function ResultsPage() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<Region>('nam');
-  const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region);
   const [autoFetchResults, setAutoFetchResults] = useState(true);
+  const workspaceParams = useMemo(() => ({ autoFetch: autoFetchResults ? 1 : 0 }), [autoFetchResults]);
+  const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region, {
+    endpoint: 'results',
+    params: workspaceParams,
+  });
   const autoFetchKey = useRef('');
   const [manualKq, setManualKq] = useState('');
   const [notice, setNotice] = useState('');
   const [pending, startTransition] = useTransition();
 
   const totals = useMemo(() => {
-    const tickets = workspace?.tickets || [];
-    return {
-      tickets: tickets.length,
-      checked: tickets.filter(ticket => Number(ticket.tien_thang || 0) > 0 || (ticket.status !== 'Chua co KQ' && ticket.status !== '?')).length,
-      xac: tickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
-      win: tickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
-    };
-  }, [workspace]);
+    return workspace?.totals || { tickets: 0, checked: 0, xac: 0, win: 0 };
+  }, [workspace?.totals]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem('xoso-auto-fetch-results');
@@ -89,7 +91,14 @@ export function ResultsPage() {
   }, [autoFetchResults]);
 
   useEffect(() => {
-    if (!autoFetchResults || !workspace || loading || pending || workspace.drawResults.length) return;
+    if (workspace?.autoFetchAttempted && workspace.needsManual) {
+      const tried = workspace.sourceAttempts?.length ? ` Đã thử ${workspace.sourceAttempts.length} nguồn.` : '';
+      setNotice(`${workspace.fetchReason || 'Chưa lấy được kết quả tự động.'}${tried} Nếu nguồn chưa đủ dữ liệu, hãy dùng khung dán tay bên dưới.`);
+    }
+  }, [workspace?.autoFetchAttempted, workspace?.fetchReason, workspace?.needsManual, workspace?.sourceAttempts?.length]);
+
+  useEffect(() => {
+    if (!autoFetchResults || !workspace || loading || pending || workspace.drawResults.length || workspace.autoFetchAttempted) return;
     const key = `${date}|${region}`;
     if (autoFetchKey.current === key) return;
     autoFetchKey.current = key;

@@ -47,18 +47,23 @@ export async function fetchAndStoreDrawResults(args: {
 
 async function fetchDrawSource(url: string, region: Region) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 4500);
   let response: Response;
   try {
     response = await fetch(url, {
       cache: 'no-store',
       signal: controller.signal,
       headers: {
-        'user-agent': 'Mozilla/5.0 XosoWeb/1.0',
+        accept: 'text/html,application/xhtml+xml',
+        'accept-language': 'vi-VN,vi;q=0.9,en;q=0.7',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) XosoWeb/1.0',
       },
     });
-  } catch {
+  } catch (error) {
     clearTimeout(timeout);
+    if ((error as Error).name === 'AbortError') {
+      return { ok: false, reason: 'Nguon ket qua phan hoi qua cham.' };
+    }
     return { ok: false, reason: 'Không tải được nguồn kết quả tự động.' };
   }
   clearTimeout(timeout);

@@ -2534,7 +2534,7 @@ function parseSingleStationHtmlDraw(html, cfg) {
 }
 
 function parseMultiStationHtmlDraw(html, cfg) {
-  const table = firstMatch(html, /<table[^>]*class=["'][^"']*col(?:two|three|four)city[^"']*colgiai[^"']*["'][^>]*>[\s\S]*?<\/table>/i);
+  const table = firstMatch(html, /<table[^>]*class=["'][^"']*(?:col(?:two|three|four)city|badai)[^"']*colgiai[^"']*["'][^>]*>[\s\S]*?<\/table>/i);
   if (!table) return null;
   const rows = matchHtml(table, /<tr[^>]*>[\s\S]*?<\/tr>/gi);
   const header = rows.find(row => /<th[\s>]/i.test(row));

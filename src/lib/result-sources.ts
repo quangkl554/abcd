@@ -1,9 +1,21 @@
 import type { Region } from './core';
 
 export const DEFAULT_RESULT_SOURCE_URLS: Record<Region, string[]> = {
-  nam: ['https://xsmn.net/'],
-  trung: ['https://xsmn.net/xsmt'],
-  bac: ['https://xsmn.net/xsmb'],
+  nam: [
+    'https://az24.vn/xsmn-{d}-{m}-{yyyy}.html',
+    'https://xsmn.mobi/xsmn-{d}-{m}-{yyyy}.html',
+    'https://xsmn.net/',
+  ],
+  trung: [
+    'https://az24.vn/xsmt-{d}-{m}-{yyyy}.html',
+    'https://xsmn.mobi/xsmt-{d}-{m}-{yyyy}.html',
+    'https://xsmn.net/xsmt',
+  ],
+  bac: [
+    'https://az24.vn/xsmb-{d}-{m}-{yyyy}.html',
+    'https://xsmn.mobi/xsmb-{d}-{m}-{yyyy}.html',
+    'https://xsmn.net/xsmb',
+  ],
 };
 
 export function resultSourceUrls(region: Region, date?: string) {
@@ -17,7 +29,7 @@ export function resultSourceUrls(region: Region, date?: string) {
     process.env[multiEnvKey],
     ...numbered,
   ].flatMap(splitSourceList);
-  const urls = configured.length ? configured : DEFAULT_RESULT_SOURCE_URLS[region];
+  const urls = [...configured, ...DEFAULT_RESULT_SOURCE_URLS[region]];
   return unique(urls.map(url => formatSourceUrl(url, date, region)).filter(Boolean));
 }
 

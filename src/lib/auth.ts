@@ -32,18 +32,29 @@ export async function getCurrentUserAndProfile() {
   const supabase = await createClient();
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(XOSO_SESSION_COOKIE)?.value || null;
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) return { supabase, user: null, profile: null, sessionId };
+  let user: { id: string; email?: string | null } | null = null;
+
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (claimsData?.claims?.sub) {
+    user = {
+      id: claimsData.claims.sub,
+      email: typeof claimsData.claims.email === 'string' ? claimsData.claims.email : null,
+    };
+  } else {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) return { supabase, user: null, profile: null, sessionId };
+    user = userData.user;
+  }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('user_id', userData.user.id)
+    .eq('user_id', user.id)
     .single();
 
   return {
     supabase,
-    user: userData.user,
+    user,
     profile: profile as AppProfile | null,
     sessionId,
   };

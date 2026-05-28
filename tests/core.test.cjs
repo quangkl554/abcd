@@ -1017,6 +1017,23 @@ test('parse az24-style html draw tables', () => {
   assert.equal(nam.results['Đồng Nai'].db[0], '738909');
   assert.equal(nam.results['Cần Thơ'].g8[0], '94');
   assert.equal(nam.results['Sóc Trăng'].g4.length, 7);
+  const mobiNam = core.parseDrawResultText(`
+    <table class="extendable read-result badai colgiai"><tbody>
+      <tr class="gr-yellow"><th></th><th>Tay Ninh</th><th>An Giang</th><th>Binh Thuan</th></tr>
+      <tr class="g8"><td>G8</td><td><div>74</div></td><td><div>86</div></td><td><div>46</div></td></tr>
+      <tr><td>G7</td><td><div>102</div></td><td><div>054</div></td><td><div>751</div></td></tr>
+      <tr><td>G6</td><td><div>9161</div><div>8209</div><div>5690</div></td><td><div>9247</div><div>2584</div><div>8849</div></td><td><div>0130</div><div>6457</div><div>3378</div></td></tr>
+      <tr><td>G5</td><td><div>4055</div></td><td><div>7319</div></td><td><div>9645</div></td></tr>
+      <tr><td>G4</td><td><div>58483</div><div>33836</div><div>77399</div><div>12078</div><div>16273</div><div>64606</div><div>02528</div></td><td><div>26611</div><div>70238</div><div>22071</div><div>71935</div><div>84472</div><div>74682</div><div>00597</div></td><td><div>66670</div><div>53045</div><div>94538</div><div>37971</div><div>17497</div><div>31357</div><div>12829</div></td></tr>
+      <tr><td>G3</td><td><div>65215</div><div>57607</div></td><td><div>24198</div><div>30102</div></td><td><div>19584</div><div>42289</div></td></tr>
+      <tr><td>G2</td><td><div>10248</div></td><td><div>97431</div></td><td><div>36340</div></td></tr>
+      <tr><td>G1</td><td><div>55851</div></td><td><div>58783</div></td><td><div>33365</div></td></tr>
+      <tr class="gdb"><td>DB</td><td><div>490332</div></td><td><div>377962</div></td><td><div>180200</div></td></tr>
+    </tbody></table>
+  `, 'nam');
+  assert.deepEqual(mobiNam.activeDai, ['Tây Ninh', 'An Giang', 'Bình Thuận']);
+  assert.equal(mobiNam.results['Tây Ninh'].db[0], '490332');
+  assert.equal(mobiNam.results['Bình Thuận'].g4.length, 7);
 });
 
 test('format report and split Telegram messages', () => {
