@@ -30,3 +30,18 @@ test('unicode warning line prefix becomes editable parse issue', () => {
   assert.equal(issues[0].line_no, 2);
   assert.equal(issues[0].source_text, 'bli05 45 85b 100n');
 });
+
+test('different token warnings on the same line become one editable issue', () => {
+  const issues = issueDraftsFromWarnings({
+    warnings: ['Dòng 2: bỏ qua token "tin"', 'Dòng 2: bỏ qua token "nay"'],
+    rawText: 'nguoi 1:\n06 46 86b 120n ag lay tin nay',
+    date: '2026-05-28',
+    region: 'nam',
+  });
+
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].line_no, 2);
+  assert.equal(issues[0].source_text, '06 46 86b 120n ag lay tin nay');
+  assert.equal(issues[0].warning.includes('"tin"'), true);
+  assert.equal(issues[0].warning.includes('"nay"'), true);
+});

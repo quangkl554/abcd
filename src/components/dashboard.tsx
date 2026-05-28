@@ -85,6 +85,13 @@ type Workspace = {
   summary: Array<{ playerId: string | null; playerName: string; soVe: number; tongXac: number; tongTrung: number; laiLo: number }>;
 };
 
+type EditingLine = {
+  key: string;
+  messageId: string;
+  sourceText: string;
+  sourceLineNumber: number | null;
+};
+
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
   { id: 'trung', label: 'Miền Trung', short: 'Trung' },
@@ -111,7 +118,7 @@ export function Dashboard() {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [ticketText, setTicketText] = useState('');
   const [issueDrafts, setIssueDrafts] = useState<Record<string, string>>({});
-  const [editingMessageId, setEditingMessageId] = useState('');
+  const [editingLine, setEditingLine] = useState<EditingLine | null>(null);
   const [editingText, setEditingText] = useState('');
   const [notice, setNotice] = useState('');
   const [pending, startTransition] = useTransition();
@@ -133,7 +140,7 @@ export function Dashboard() {
     if (!selectedPlayerId) return issues;
     return issues.filter(issue => filteredMessageIds.has(issue.ticket_message_id));
   }, [filteredMessageIds, selectedPlayerId, workspace?.issues]);
-  const activeIssues = useMemo(() => filteredIssues.filter(issue => issue.status === 'open'), [filteredIssues]);
+  const activeIssues = useMemo(() => groupOpenIssues(filteredIssues), [filteredIssues]);
   const messageOrder = useMemo(() => {
     const map = new Map<string, number>();
     [...filteredMessages]
@@ -238,17 +245,27 @@ export function Dashboard() {
   }
 
   function startEdit(ticket: Ticket) {
-    setEditingMessageId(ticket.ticket_message_id);
+    const sourceLineNumber = ticketSourceLine(ticket, filteredMessages);
+    setEditingLine({
+      key: ticketLineKey(ticket, sourceLineNumber),
+      messageId: ticket.ticket_message_id,
+      sourceText: ticket.source_text || '',
+      sourceLineNumber,
+    });
     setEditingText(ticket.source_text || '');
   }
 
   async function saveEditedMessage() {
-    if (!editingMessageId || !editingText.trim()) return setError('Tin sửa không được trống.');
-    setNotice('Đang thêm dữ liệu từ bản sửa...');
-    const response = await apiPost(`/api/ticket-messages/${editingMessageId}/reparse`, { correctedText: editingText, mode: 'append' });
+    if (!editingLine || !editingText.trim()) return setError('Tin sửa không được trống.');
+    setNotice(`Đang thay dữ liệu của dòng ${editingLine.sourceLineNumber || '?'}...`);
+    const response = await apiPost(`/api/ticket-messages/${editingLine.messageId}/reparse`, {
+      correctedText: editingText,
+      sourceText: editingLine.sourceText || undefined,
+      mode: 'append',
+    });
     if (!response.ok) return setError(response.error);
-    setNotice(response.issues?.length ? 'Đã thêm phần sửa được, vẫn còn cảnh báo cần xử lý.' : 'Đã thêm dữ liệu từ tin sửa, không xóa vé cũ.');
-    setEditingMessageId('');
+    setNotice(response.issues?.length ? 'Đã thay phần sửa được, vẫn còn cảnh báo cần xử lý.' : 'Đã thay dữ liệu của dòng sửa.');
+    setEditingLine(null);
     setEditingText('');
     await loadWorkspace({ force: true });
   }
@@ -351,7 +368,7 @@ export function Dashboard() {
             <div className="section-header">
               <div>
                 <h2 className="section-title"><CheckCircle2 size={18} /> Bảng vé</h2>
-                <p className="section-note">Sửa/parse lại sẽ thêm dữ liệu mới và giữ nguyên các vé đã nhận trước đó.</p>
+                <p className="section-note">Bấm sửa ở dòng nào thì hệ thống thay lại vé của đúng dòng đó, các dòng khác giữ nguyên.</p>
               </div>
               <span className="muted">{filteredTickets.length} dòng</span>
             </div>
@@ -379,12 +396,13 @@ export function Dashboard() {
                       rowNumber={index + 1}
                       messageNumber={messageOrder.get(ticket.ticket_message_id) || 0}
                       sourceLineNumber={ticketSourceLine(ticket, filteredMessages)}
-                      editingMessageId={editingMessageId}
+                      lineKey={ticketLineKey(ticket, ticketSourceLine(ticket, filteredMessages))}
+                      editingLineKey={editingLine?.key || ''}
                       editingText={editingText}
                       setEditingText={setEditingText}
                       startEdit={startEdit}
                       cancelEdit={() => {
-                        setEditingMessageId('');
+                        setEditingLine(null);
                         setEditingText('');
                       }}
                       saveEditedMessage={saveEditedMessage}
@@ -462,7 +480,8 @@ function TableRows(props: {
   rowNumber: number;
   messageNumber: number;
   sourceLineNumber: number | null;
-  editingMessageId: string;
+  lineKey: string;
+  editingLineKey: string;
   editingText: string;
   setEditingText: (value: string) => void;
   startEdit: (ticket: Ticket) => void;
@@ -470,7 +489,7 @@ function TableRows(props: {
   saveEditedMessage: () => void;
   deleteMessage: (ticket: Ticket) => void;
 }) {
-  const isEditing = props.editingMessageId === props.ticket.ticket_message_id;
+  const isEditing = props.editingLineKey === props.lineKey;
   return (
     <>
       <tr>
@@ -490,7 +509,7 @@ function TableRows(props: {
         <td className="source-cell"><HighlightedSource text={props.ticket.source_text} /></td>
         <td>
           <div className="table-actions">
-            <button className="btn icon soft" type="button" title="Thêm bản sửa từ tin này" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
+            <button className="btn icon soft" type="button" title="Sửa riêng dòng này" onClick={() => props.startEdit(props.ticket)}><Edit3 size={16} /></button>
             <button className="btn icon danger-soft" type="button" title="Xóa tin" onClick={() => props.deleteMessage(props.ticket)}><Trash2 size={16} /></button>
           </div>
         </td>
@@ -659,8 +678,29 @@ function ticketSourceLine(ticket: Ticket, messages: TicketMessage[]) {
   return index >= 0 ? index + 1 : null;
 }
 
+function ticketLineKey(ticket: Ticket, sourceLineNumber: number | null) {
+  return `${ticket.ticket_message_id}|${sourceLineNumber || ''}|${normalizeTicketLine(ticket.source_text || '')}`;
+}
+
 function normalizeTicketLine(value: string) {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function groupOpenIssues(issues: ParseIssue[]) {
+  const grouped = new Map<string, ParseIssue>();
+  for (const issue of issues) {
+    if (issue.status !== 'open') continue;
+    const key = `${issue.ticket_message_id}|${issue.line_no || ''}|${normalizeTicketLine(issue.source_text || '') || issue.id}`;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, { ...issue });
+      continue;
+    }
+    if (!existing.warning.includes(issue.warning)) {
+      existing.warning = `${existing.warning}; ${issue.warning}`;
+    }
+  }
+  return [...grouped.values()];
 }
 
 function money(value: number) {

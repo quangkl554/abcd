@@ -79,6 +79,7 @@ export async function reparseTicketMessage(args: {
   messageId: string;
   correctedText: string;
   issueId?: string;
+  sourceText?: string;
   mode?: 'append' | 'replace';
 }) {
   const { data: message, error: findError } = await args.supabase
@@ -102,6 +103,9 @@ export async function reparseTicketMessage(args: {
   const player = playerName ? await upsertPlayer(args.supabase, args.ownerId, playerName, selectedPlayer?.rate_profile) : selectedPlayer;
   const playerId = player?.id || selectedPlayer?.id || null;
   const replacedSourceTexts = new Set<string>();
+  let issueSourceText = '';
+  const sourceText = args.sourceText?.trim() || '';
+  if (sourceText) replacedSourceTexts.add(sourceText);
 
   if (args.issueId) {
     const { data: issue, error: issueFindError } = await args.supabase
@@ -112,7 +116,10 @@ export async function reparseTicketMessage(args: {
       .eq('id', args.issueId)
       .maybeSingle();
     if (issueFindError) throw issueFindError;
-    if (issue?.source_text) replacedSourceTexts.add(issue.source_text);
+    if (issue?.source_text) {
+      issueSourceText = issue.source_text;
+      replacedSourceTexts.add(issue.source_text);
+    }
   }
 
   const mode = args.mode || 'append';
@@ -125,18 +132,24 @@ export async function reparseTicketMessage(args: {
     if (deleteTicketsError) throw deleteTicketsError;
   }
 
-  let issueUpdate = args.supabase
-    .from('parse_issues')
-    .update({ status: 'resolved', corrected_text: args.correctedText, resolved_at: new Date().toISOString() })
-    .eq('owner_id', args.ownerId)
-    .eq('ticket_message_id', args.messageId)
-    .eq('status', 'open');
-  if (args.issueId) issueUpdate = issueUpdate.eq('id', args.issueId);
-  const { error: issueUpdateError } = await issueUpdate;
-  if (issueUpdateError) throw issueUpdateError;
+  const issueFilterSource = issueSourceText || sourceText;
+  if (args.issueId || issueFilterSource) {
+    let issueUpdate = args.supabase
+      .from('parse_issues')
+      .update({ status: 'resolved', corrected_text: args.correctedText, resolved_at: new Date().toISOString() })
+      .eq('owner_id', args.ownerId)
+      .eq('ticket_message_id', args.messageId)
+      .eq('status', 'open');
+    if (issueFilterSource) issueUpdate = issueUpdate.eq('source_text', issueFilterSource);
+    else if (args.issueId) issueUpdate = issueUpdate.eq('id', args.issueId);
+    const { error: issueUpdateError } = await issueUpdate;
+    if (issueUpdateError) throw issueUpdateError;
+  }
 
   const nextRawText = mode === 'append'
-    ? appendCorrectionText(message.raw_text || '', args.correctedText)
+    ? sourceText
+      ? replaceSourceLineText(message.raw_text || '', sourceText, args.correctedText)
+      : appendCorrectionText(message.raw_text || '', args.correctedText)
     : args.correctedText;
 
   const { data: updated, error: updateError } = await args.supabase
@@ -199,6 +212,21 @@ function appendCorrectionText(rawText: string, correctedText: string) {
   if (!trimmedRaw) return trimmedCorrection;
   if (trimmedRaw.includes(trimmedCorrection)) return trimmedRaw;
   return `${trimmedRaw}\n${trimmedCorrection}`;
+}
+
+function replaceSourceLineText(rawText: string, sourceText: string, correctedText: string) {
+  const source = normalizeLine(sourceText);
+  const correction = correctedText.trim();
+  if (!source) return appendCorrectionText(rawText, correctedText);
+  const lines = String(rawText || '').split(/\r?\n/);
+  const index = lines.findIndex(line => normalizeLine(line) === source);
+  if (index < 0) return appendCorrectionText(rawText, correctedText);
+  lines.splice(index, 1, ...correction.split(/\r?\n/));
+  return lines.join('\n').trim();
+}
+
+function normalizeLine(value: string) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 async function deleteTicketsBySourceText(supabase: SupabaseLike, ownerId: string, messageId: string, sourceTexts: Set<string>) {

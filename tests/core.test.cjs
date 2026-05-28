@@ -321,6 +321,24 @@ test('parse glued station aliases and double b compact lo token', () => {
     ['38', '78'],
     ['38', '78'],
   ]);
+
+  const gluedNumberStake = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nTn ag 58 85 18 81 14 41b 50n dd 75n 44 43 b 50n 844 843b 10n xc 75n 8844 4844b 5n 8843n 10n',
+    region: 'nam',
+    date: new Date(2026, 4, 28),
+  });
+  const fourCang = gluedNumberStake.tickets.filter(t => t.loai === '4Cang');
+  assert.equal(gluedNumberStake.tickets.some(t => t.xac > 100_000_000), false);
+  assert.deepEqual(fourCang.map(t => t.soList), [['8844', '4844'], ['8843']]);
+  assert.deepEqual(fourCang.map(t => t.tienDat), [5, 10]);
+
+  const trailingFiller = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n06 46 86b 120n 15 55 95b 75n 00 40 80b 40n 10 50 90b 60n dau 15 55 95 200n ag lay tin nay',
+    region: 'nam',
+    date: new Date(2026, 4, 28),
+  });
+  assert.deepEqual(trailingFiller.tickets.map(t => t.dai), trailingFiller.tickets.map(() => ['An Giang']));
+  assert.deepEqual(trailingFiller.warnings, []);
 });
 
 test('parse station-prefixed bet type and bl before station scope', () => {

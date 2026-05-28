@@ -1395,6 +1395,9 @@ function parseLegacyTickets(rawText, options = {}) {
     'moi',
     'nhe',
     'di',
+    'lay',
+    'tin',
+    'nay',
   ].includes(tok);
 
   for (let ln = 0; ln < lines.length; ln++) {
@@ -1780,6 +1783,27 @@ function parseLegacyTickets(rawText, options = {}) {
         numBuf.push(tok);
         i++;
         continue;
+      }
+
+      const gluedNumberBeforeStake = tok.match(/^(\d{2,4})n$/);
+      if (gluedNumberBeforeStake && i + 1 < tokens.length) {
+        const gluedNumber = gluedNumberBeforeStake[1];
+        const nextStake = getStakeTien(tokens[i + 1]);
+        const currentStake = getStakeTien(tok);
+        const duplicatedDauDuoiStake =
+          currentLoai === 'DauDuoi' &&
+          currentStake > 0 &&
+          nextStake === currentStake &&
+          (numBuf.length > 0 || lastNumBuf.length > 0);
+        const looksLikeMistypedType =
+          nextStake > 0 &&
+          !duplicatedDauDuoiStake &&
+          (gluedNumber.length >= 3 || nextStake !== currentStake);
+        if (looksLikeMistypedType) {
+          numBuf.push(gluedNumber);
+          i++;
+          continue;
+        }
       }
 
       let tValue = getStakeTien(tok);

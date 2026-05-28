@@ -13,6 +13,7 @@ export const createTicketMessageSchema = z.object({
 export const reparseSchema = z.object({
   correctedText: z.string().trim().min(1),
   issueId: z.string().uuid().optional(),
+  sourceText: z.string().trim().min(1).optional(),
   mode: z.enum(['append', 'replace']).default('append'),
 });
 
