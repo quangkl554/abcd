@@ -695,6 +695,19 @@ test('parse dd with two stakes as dau and duoi stakes', () => {
   assert.deepEqual(parsed.tickets[0].soList, ['19', '80', '60']);
 });
 
+test('parse glued first dd stake as dau and duoi stakes', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\ndd 36 10n 5n',
+    region: 'nam',
+    activeDai: ['Vũng Tàu'],
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Dau', 'Duoi']);
+  assert.deepEqual(parsed.tickets.map(t => t.tienDat), [10, 5]);
+  assert.deepEqual(parsed.tickets.map(t => t.soList), [['36'], ['36']]);
+  assert.deepEqual(parsed.warnings, []);
+});
+
 test('parse duplicated dd stake as one dau-duoi ticket', () => {
   const parsed = core.parseTelegramEnvelope({
     text: 'nguoi 1:\n65 25 57 Dd 100n 100n',

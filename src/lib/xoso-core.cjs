@@ -1790,6 +1790,11 @@ function parseLegacyTickets(rawText, options = {}) {
         const gluedNumber = gluedNumberBeforeStake[1];
         const nextStake = getStakeTien(tokens[i + 1]);
         const currentStake = getStakeTien(tok);
+        const targetNums = numBuf.length > 0 ? numBuf : lastNumBuf;
+        const hasTwoDigitDauDuoiTarget =
+          currentLoai === 'DauDuoi' &&
+          targetNums.length > 0 &&
+          targetNums.every(n => String(n).length === 2);
         const duplicatedDauDuoiStake =
           currentLoai === 'DauDuoi' &&
           currentStake > 0 &&
@@ -1797,6 +1802,7 @@ function parseLegacyTickets(rawText, options = {}) {
           (numBuf.length > 0 || lastNumBuf.length > 0);
         const looksLikeMistypedType =
           nextStake > 0 &&
+          !hasTwoDigitDauDuoiTarget &&
           !duplicatedDauDuoiStake &&
           (gluedNumber.length >= 3 || nextStake !== currentStake);
         if (looksLikeMistypedType) {
