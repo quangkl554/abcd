@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { XOSO_SESSION_COOKIE } from '@/lib/auth';
+import { XOSO_SESSION_COOKIE, isMissingProfileSessionColumn } from '@/lib/auth';
 import { jsonOk } from '@/lib/http';
 
 export const runtime = 'nodejs';
@@ -20,7 +20,10 @@ export async function POST() {
         .update({ active_session_id: null, active_session_at: null })
         .eq('user_id', data.user.id)
         .eq('active_session_id', sessionId);
-    } catch {
+    } catch (error) {
+      if (!isMissingProfileSessionColumn(error)) {
+        console.error(error);
+      }
       // Supabase sign-out and cookie clearing still need to happen.
     }
   }

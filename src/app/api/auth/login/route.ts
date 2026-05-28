@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { jsonError, jsonOk } from '@/lib/http';
-import { XOSO_SESSION_COOKIE, usernameToEmail } from '@/lib/auth';
+import { XOSO_SESSION_COOKIE, isMissingProfileSessionColumn, usernameToEmail } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const sessionId = randomUUID();
+    let responseProfile = profile;
     const { data: updatedProfile, error: sessionError } = await admin
       .from('profiles')
       .update({
@@ -45,7 +46,11 @@ export async function POST(request: NextRequest) {
       .eq('user_id', data.user.id)
       .select('*')
       .single();
-    if (sessionError) throw sessionError;
+    if (sessionError) {
+      if (!isMissingProfileSessionColumn(sessionError)) throw sessionError;
+    } else {
+      responseProfile = updatedProfile;
+    }
 
     const cookieStore = await cookies();
     cookieStore.set(XOSO_SESSION_COOKIE, sessionId, {
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
       maxAge: SESSION_MAX_AGE,
     });
 
-    return jsonOk({ profile: updatedProfile });
+    return jsonOk({ profile: responseProfile, sessionGuardEnabled: !sessionError });
   } catch (error) {
     return jsonError((error as Error).message || 'Khong dang nhap duoc.', 400);
   }

@@ -19,6 +19,15 @@ export function usernameToEmail(username: string) {
   return `${clean}@xoso.local`;
 }
 
+export function isMissingProfileSessionColumn(error: unknown) {
+  const err = error as { message?: string; code?: string; details?: string };
+  const text = `${err?.message || ''} ${err?.details || ''}`.toLowerCase();
+  return (
+    (text.includes('active_session_id') || text.includes('active_session_at')) &&
+    (text.includes('schema cache') || text.includes('column') || err?.code === 'PGRST204')
+  );
+}
+
 export async function getCurrentUserAndProfile() {
   const supabase = await createClient();
   const cookieStore = await cookies();

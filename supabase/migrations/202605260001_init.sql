@@ -6,6 +6,8 @@ create table if not exists public.profiles (
   username citext not null unique,
   role text not null default 'user' check (role in ('admin', 'user')),
   active boolean not null default true,
+  active_session_id text,
+  active_session_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -92,6 +94,7 @@ create table if not exists public.draw_results (
 );
 
 create index if not exists idx_players_owner on public.players(owner_id);
+create index if not exists idx_profiles_active_session_id on public.profiles(active_session_id);
 create index if not exists idx_ticket_messages_owner_date_region on public.ticket_messages(owner_id, message_date, region);
 create index if not exists idx_tickets_owner_date_region on public.tickets(owner_id, message_date, region);
 create index if not exists idx_tickets_owner_player on public.tickets(owner_id, player_name);
