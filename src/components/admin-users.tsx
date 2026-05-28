@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Lock, Plus, RefreshCw, Save, Shield, UserRound } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, KeyRound, Lock, Plus, RefreshCw, Save, Shield, Trash2, UserRound, XCircle } from 'lucide-react';
 
 type AdminUser = {
   user_id: string;
@@ -14,9 +14,16 @@ type AdminUser = {
 
 export function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [currentUserId, setCurrentUserId] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [role, setRole] = useState<'admin' | 'user'>('user');
+  const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -34,17 +41,23 @@ export function AdminUsers() {
       return;
     }
     setUsers(payload.users || []);
+    setCurrentUserId(payload.currentUserId || '');
   }
 
   function createUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     setMessage('');
+    if (password !== passwordConfirm) {
+      setError('Mật khẩu nhập lại chưa khớp.');
+      return;
+    }
     startTransition(async () => {
       const response = await api('/api/admin/users', 'POST', { username, password, role, active: true });
       if (!response.ok) return setError(response.error);
       setUsername('');
       setPassword('');
+      setPasswordConfirm('');
       setRole('user');
       setMessage('Đã tạo tài khoản.');
       await loadUsers();
@@ -64,11 +77,47 @@ export function AdminUsers() {
   }
 
   async function resetPassword(user: AdminUser) {
-    const nextPassword = window.prompt(`Mật khẩu mới cho ${user.username} (ít nhất 8 ký tự)`);
-    if (!nextPassword) return;
-    const response = await api('/api/admin/users', 'PATCH', { userId: user.user_id, password: nextPassword });
+    setResetTarget(user);
+    setResetPasswordValue('');
+    setResetPasswordConfirm('');
+    setError('');
+    setMessage('');
+  }
+
+  async function submitResetPassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!resetTarget) return;
+    if (resetPasswordValue !== resetPasswordConfirm) return setError('Mật khẩu nhập lại chưa khớp.');
+    const response = await api('/api/admin/users', 'PATCH', { userId: resetTarget.user_id, password: resetPasswordValue });
     if (!response.ok) return setError(response.error);
+    setResetTarget(null);
+    setResetPasswordValue('');
+    setResetPasswordConfirm('');
     setMessage('Đã đổi mật khẩu.');
+  }
+
+  function openDeleteUser(user: AdminUser) {
+    setDeleteTarget(user);
+    setDeleteConfirm('');
+    setError('');
+    setMessage('');
+  }
+
+  async function submitDeleteUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!deleteTarget) return;
+    if (deleteConfirm.trim().toLowerCase() !== deleteTarget.username.toLowerCase()) {
+      return setError('Bạn cần gõ đúng username để xác nhận xóa.');
+    }
+    const response = await api('/api/admin/users', 'DELETE', {
+      userId: deleteTarget.user_id,
+      confirmUsername: deleteConfirm,
+    });
+    if (!response.ok) return setError(response.error);
+    setMessage(`Đã xóa user ${deleteTarget.username}.`);
+    setDeleteTarget(null);
+    setDeleteConfirm('');
+    await loadUsers();
   }
 
   return (
@@ -77,8 +126,8 @@ export function AdminUsers() {
         <div className="brand">
           <div className="brand-mark"><Shield size={18} /></div>
           <div>
-            <div>Quản trị tài khoản</div>
-            <div className="muted" style={{ fontSize: 12 }}>Tạo và khóa người dùng được phép vào web</div>
+            <div className="brand-title">Quản trị truy cập</div>
+            <div className="brand-subtitle">Tạo, khóa, đổi mật khẩu và xóa user</div>
           </div>
         </div>
         <div className="topbar-actions">
@@ -87,7 +136,7 @@ export function AdminUsers() {
         </div>
       </header>
 
-      <div className="workspace" style={{ gridTemplateColumns: '420px minmax(0, 1fr)' }}>
+      <div className="workspace admin-workspace">
         <section className="section">
           <div className="section-header">
             <h1 className="section-title"><Plus size={18} /> Tạo tài khoản</h1>
@@ -102,6 +151,10 @@ export function AdminUsers() {
             <label className="field">
               Mật khẩu
               <input className="input" type="password" value={password} onChange={event => setPassword(event.target.value)} required minLength={8} />
+            </label>
+            <label className="field">
+              Nhập lại mật khẩu
+              <input className="input" type="password" value={passwordConfirm} onChange={event => setPasswordConfirm(event.target.value)} required minLength={8} />
             </label>
             <label className="field">
               Quyền
@@ -144,9 +197,18 @@ export function AdminUsers() {
                     <td>{new Date(user.created_at).toLocaleString('vi-VN')}</td>
                     <td>
                       <div className="row">
-                        <button className="btn" type="button" onClick={() => resetPassword(user)}><Lock size={16} /> Mật khẩu</button>
+                        <button className="btn" type="button" onClick={() => resetPassword(user)}><KeyRound size={16} /> Mật khẩu</button>
                         <button className={`btn ${user.active ? 'red' : 'green'}`} type="button" onClick={() => toggleUser(user)}>
                           {user.active ? 'Khóa' : 'Mở'}
+                        </button>
+                        <button
+                          className="btn danger-soft"
+                          type="button"
+                          disabled={user.user_id === currentUserId}
+                          title={user.user_id === currentUserId ? 'Không thể xóa tài khoản đang đăng nhập' : 'Xóa user'}
+                          onClick={() => openDeleteUser(user)}
+                        >
+                          <Trash2 size={16} /> Xóa
                         </button>
                       </div>
                     </td>
@@ -157,11 +219,59 @@ export function AdminUsers() {
           </div>
         </section>
       </div>
+
+      {resetTarget ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <form className="modal-panel" onSubmit={submitResetPassword}>
+            <div className="modal-head">
+              <div>
+                <h2><Lock size={18} /> Đổi mật khẩu</h2>
+                <p>User: <b>{resetTarget.username}</b></p>
+              </div>
+              <button className="btn icon soft" type="button" onClick={() => setResetTarget(null)} title="Đóng"><XCircle size={18} /></button>
+            </div>
+            <label className="field">
+              Mật khẩu mới
+              <input className="input" type="password" value={resetPasswordValue} onChange={event => setResetPasswordValue(event.target.value)} required minLength={8} autoFocus />
+            </label>
+            <label className="field">
+              Nhập lại mật khẩu mới
+              <input className="input" type="password" value={resetPasswordConfirm} onChange={event => setResetPasswordConfirm(event.target.value)} required minLength={8} />
+            </label>
+            <div className="row action-row">
+              <button className="btn primary" type="submit"><Save size={16} /> Lưu mật khẩu</button>
+              <button className="btn soft" type="button" onClick={() => setResetTarget(null)}>Hủy</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <form className="modal-panel danger-modal" onSubmit={submitDeleteUser}>
+            <div className="modal-head">
+              <div>
+                <h2><AlertTriangle size={18} /> Xóa user</h2>
+                <p>Gõ đúng <b>{deleteTarget.username}</b> để xác nhận.</p>
+              </div>
+              <button className="btn icon soft" type="button" onClick={() => setDeleteTarget(null)} title="Đóng"><XCircle size={18} /></button>
+            </div>
+            <label className="field">
+              Username xác nhận
+              <input className="input" value={deleteConfirm} onChange={event => setDeleteConfirm(event.target.value)} required autoFocus />
+            </label>
+            <div className="row action-row">
+              <button className="btn red" type="submit"><Trash2 size={16} /> Xóa user</button>
+              <button className="btn soft" type="button" onClick={() => setDeleteTarget(null)}>Hủy</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </main>
   );
 }
 
-async function api(url: string, method: 'POST' | 'PATCH', body: unknown) {
+async function api(url: string, method: 'POST' | 'PATCH' | 'DELETE', body: unknown) {
   const response = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },

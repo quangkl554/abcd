@@ -57,3 +57,8 @@ export const adminUserPatchSchema = z.object({
   role: z.enum(['admin', 'user']).optional(),
   active: z.boolean().optional(),
 });
+
+export const adminUserDeleteSchema = z.object({
+  userId: z.string().uuid(),
+  confirmUsername: z.string().trim().min(1),
+});

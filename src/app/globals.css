@@ -346,6 +346,10 @@ p {
   padding: 16px;
 }
 
+.admin-workspace {
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+}
+
 .results-workspace {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
 }
@@ -1363,6 +1367,53 @@ tr:hover td {
   background: var(--panel-soft);
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.modal-panel {
+  display: grid;
+  gap: 12px;
+  width: min(460px, 100%);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.modal-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.danger-modal {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+}
+
 @media (max-width: 1360px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -1374,6 +1425,7 @@ tr:hover td {
   }
 
   .workspace,
+  .admin-workspace,
   .results-workspace,
   .summary-workspace {
     grid-template-columns: 1fr;

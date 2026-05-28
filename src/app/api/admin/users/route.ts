@@ -1,19 +1,19 @@
 import { type NextRequest } from 'next/server';
 import { authErrorResponse, requireAdmin, usernameToEmail } from '@/lib/auth';
 import { jsonError, jsonOk } from '@/lib/http';
-import { adminUserCreateSchema, adminUserPatchSchema } from '@/lib/validation';
+import { adminUserCreateSchema, adminUserDeleteSchema, adminUserPatchSchema } from '@/lib/validation';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const { admin } = await requireAdmin();
+    const { admin, user } = await requireAdmin();
     const { data, error } = await admin
       .from('profiles')
       .select('user_id, username, role, active, created_at, updated_at')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return jsonOk({ users: data || [] });
+    return jsonOk({ users: data || [], currentUserId: user.id });
   } catch (error) {
     const mapped = authErrorResponse(error);
     return jsonError(mapped.message, mapped.status);
@@ -79,6 +79,32 @@ export async function PATCH(request: NextRequest) {
     }
 
     return jsonOk({ user: profile, passwordUpdated: Boolean(input.password) });
+  } catch (error) {
+    const mapped = authErrorResponse(error);
+    return jsonError(mapped.message, mapped.status || 400);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { admin, user } = await requireAdmin();
+    const input = adminUserDeleteSchema.parse(await request.json());
+    if (input.userId === user.id) return jsonError('Khong the xoa tai khoan dang dang nhap.', 400);
+
+    const { data: profile, error: profileError } = await admin
+      .from('profiles')
+      .select('user_id, username')
+      .eq('user_id', input.userId)
+      .single();
+    if (profileError) throw profileError;
+    if (String(profile.username || '').toLowerCase() !== input.confirmUsername.trim().toLowerCase()) {
+      return jsonError('Username xac nhan khong dung.', 400);
+    }
+
+    const { error: deleteError } = await admin.auth.admin.deleteUser(input.userId);
+    if (deleteError) throw deleteError;
+
+    return jsonOk({ deleted: true });
   } catch (error) {
     const mapped = authErrorResponse(error);
     return jsonError(mapped.message, mapped.status || 400);
