@@ -281,6 +281,23 @@ test('plus-separated station aliases and trailing bli are treated as stations', 
   assert.deepEqual(leading.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
 });
 
+test('trailing str alias moves parsed tickets to Soc Trang without default duplicate', () => {
+  const date = new Date(2026, 4, 27);
+  const activeDai = core.getActiveDai('nam', date);
+  assert.deepEqual(activeDai, ['Đồng Nai', 'Cần Thơ', 'Sóc Trăng']);
+
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n21 61 01 41 81b 40n 27 67b 60n 13 53 93 33 73b 40n dui 120n 06 60 20b 35n dd 06 60 180n str\n11 51 91b 60n dd 180n str',
+    region: 'nam',
+    date,
+  });
+
+  assert.equal(parsed.tickets.length, 8);
+  assert.deepEqual(parsed.tickets.map(t => t.dai), parsed.tickets.map(() => ['Sóc Trăng']));
+  assert.equal(parsed.tickets.some(t => t.dai.includes('Đồng Nai')), false);
+  assert.equal(parsed.warnings.some(w => w.includes('"str"')), false);
+});
+
 test('parse glued station aliases and double b compact lo token', () => {
   const date = new Date(2026, 4, 26);
   const activeDai = core.getActiveDai('nam', date);

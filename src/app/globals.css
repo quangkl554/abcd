@@ -1389,8 +1389,28 @@ tr:hover td {
 }
 
 @media (max-width: 720px) {
+  .login-shell {
+    align-content: center;
+    place-items: stretch;
+    padding: 12px;
+  }
+
+  .login-panel {
+    padding: 18px;
+  }
+
   .topbar {
+    position: static;
+    gap: 10px;
     padding: 10px;
+  }
+
+  .brand-title {
+    font-size: 18px;
+  }
+
+  .brand-subtitle {
+    display: none;
   }
 
   .workspace {
@@ -1398,7 +1418,25 @@ tr:hover td {
   }
 
   .page-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
+  }
+
+  .page-tab {
+    min-width: 0;
+    padding-inline: 6px;
+  }
+
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    width: 100%;
+  }
+
+  .topbar-actions .badge.user {
+    min-width: 0;
+    justify-content: center;
+    overflow: hidden;
   }
 
   .summary-grid {
@@ -1437,6 +1475,7 @@ tr:hover td {
   .toggle,
   .select.compact {
     width: 100%;
+    max-width: none;
   }
 
   .summary-table-head,
@@ -1446,5 +1485,21 @@ tr:hover td {
 
   .dashboard-card-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .metric strong,
+  .dashboard-card strong {
+    font-size: 21px;
   }
 }

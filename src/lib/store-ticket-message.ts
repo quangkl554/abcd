@@ -101,6 +101,19 @@ export async function reparseTicketMessage(args: {
   const playerName = parsed.playerName || message.player_name || selectedPlayer?.name || null;
   const player = playerName ? await upsertPlayer(args.supabase, args.ownerId, playerName, selectedPlayer?.rate_profile) : selectedPlayer;
   const playerId = player?.id || selectedPlayer?.id || null;
+  const replacedSourceTexts = new Set<string>();
+
+  if (args.issueId) {
+    const { data: issue, error: issueFindError } = await args.supabase
+      .from('parse_issues')
+      .select('source_text')
+      .eq('owner_id', args.ownerId)
+      .eq('ticket_message_id', args.messageId)
+      .eq('id', args.issueId)
+      .maybeSingle();
+    if (issueFindError) throw issueFindError;
+    if (issue?.source_text) replacedSourceTexts.add(issue.source_text);
+  }
 
   const mode = args.mode || 'append';
   if (mode === 'replace') {
@@ -148,6 +161,10 @@ export async function reparseTicketMessage(args: {
     playerId,
   }));
 
+  if (mode === 'append' && replacedSourceTexts.size) {
+    await deleteTicketsBySourceText(args.supabase, args.ownerId, args.messageId, replacedSourceTexts);
+  }
+
   if (mode === 'append' && ticketRows.length) {
     ticketRows = await removeExistingTicketRows(args.supabase, args.ownerId, args.messageId, ticketRows);
   }
@@ -182,6 +199,18 @@ function appendCorrectionText(rawText: string, correctedText: string) {
   if (!trimmedRaw) return trimmedCorrection;
   if (trimmedRaw.includes(trimmedCorrection)) return trimmedRaw;
   return `${trimmedRaw}\n${trimmedCorrection}`;
+}
+
+async function deleteTicketsBySourceText(supabase: SupabaseLike, ownerId: string, messageId: string, sourceTexts: Set<string>) {
+  const values = [...sourceTexts].map(text => text.trim()).filter(Boolean);
+  if (!values.length) return;
+  const { error } = await supabase
+    .from('tickets')
+    .delete()
+    .eq('owner_id', ownerId)
+    .eq('ticket_message_id', messageId)
+    .in('source_text', values);
+  if (error) throw error;
 }
 
 async function removeExistingTicketRows(supabase: SupabaseLike, ownerId: string, messageId: string, ticketRows: any[]) {

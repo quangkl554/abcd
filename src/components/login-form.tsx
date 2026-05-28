@@ -3,7 +3,12 @@
 import { useState, useTransition } from 'react';
 import { LogIn } from 'lucide-react';
 
-export function LoginForm() {
+type LoginFormProps = {
+  notice?: string;
+  nextPath?: string;
+};
+
+export function LoginForm({ notice, nextPath = '/app' }: LoginFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,12 +28,13 @@ export function LoginForm() {
         setError(payload.error || 'Không đăng nhập được.');
         return;
       }
-      window.location.href = '/app';
+      window.location.href = nextPath;
     });
   }
 
   return (
     <form className="form-grid" onSubmit={submit}>
+      {notice ? <div className="notice">{notice}</div> : null}
       <label className="field">
         Tên đăng nhập
         <input className="input" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required />
@@ -42,6 +48,7 @@ export function LoginForm() {
         <LogIn size={18} />
         {pending ? 'Đang vào...' : 'Đăng nhập'}
       </button>
+      <p className="mini-note">Đăng nhập ở thiết bị mới sẽ tự khóa phiên đang mở ở thiết bị cũ.</p>
     </form>
   );
 }

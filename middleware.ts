@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+const XOSO_SESSION_COOKIE = 'xoso_session_id';
+
 export async function middleware(request: NextRequest) {
   const protectedPath = ['/app', '/results', '/summary', '/admin'].some(path => request.nextUrl.pathname.startsWith(path));
   if (!protectedPath) return NextResponse.next();
@@ -28,11 +30,15 @@ export async function middleware(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, active')
+    .select('*')
     .eq('user_id', data.user.id)
     .single();
 
   if (!profile?.active) return redirectToLogin(request);
+  const sessionId = request.cookies.get(XOSO_SESSION_COOKIE)?.value || null;
+  if (profile.active_session_id && profile.active_session_id !== sessionId) {
+    return redirectToLogin(request, 'session-replaced');
+  }
   if (request.nextUrl.pathname.startsWith('/admin') && profile.role !== 'admin') {
     const url = request.nextUrl.clone();
     url.pathname = '/app';
@@ -42,11 +48,14 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-function redirectToLogin(request: NextRequest) {
+function redirectToLogin(request: NextRequest, reason?: string) {
   const url = request.nextUrl.clone();
   url.pathname = '/login';
   url.searchParams.set('next', request.nextUrl.pathname);
-  return NextResponse.redirect(url);
+  if (reason) url.searchParams.set('reason', reason);
+  const response = NextResponse.redirect(url);
+  if (reason === 'session-replaced') response.cookies.set(XOSO_SESSION_COOKIE, '', { path: '/', maxAge: 0 });
+  return response;
 }
 
 export const config = {

@@ -1,11 +1,16 @@
+import { cookies } from 'next/headers';
 import { createClient } from './supabase/server';
 import { createAdminClient } from './supabase/admin';
+
+export const XOSO_SESSION_COOKIE = 'xoso_session_id';
 
 export type AppProfile = {
   user_id: string;
   username: string;
   role: 'admin' | 'user';
   active: boolean;
+  active_session_id?: string | null;
+  active_session_at?: string | null;
 };
 
 export function usernameToEmail(username: string) {
@@ -16,12 +21,14 @@ export function usernameToEmail(username: string) {
 
 export async function getCurrentUserAndProfile() {
   const supabase = await createClient();
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get(XOSO_SESSION_COOKIE)?.value || null;
   const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) return { supabase, user: null, profile: null };
+  if (userError || !userData.user) return { supabase, user: null, profile: null, sessionId };
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('user_id, username, role, active')
+    .select('*')
     .eq('user_id', userData.user.id)
     .single();
 
@@ -29,6 +36,7 @@ export async function getCurrentUserAndProfile() {
     supabase,
     user: userData.user,
     profile: profile as AppProfile | null,
+    sessionId,
   };
 }
 
@@ -36,6 +44,9 @@ export async function requireActiveUser() {
   const ctx = await getCurrentUserAndProfile();
   if (!ctx.user) throw Object.assign(new Error('UNAUTHENTICATED'), { status: 401 });
   if (!ctx.profile || !ctx.profile.active) throw Object.assign(new Error('ACCOUNT_DISABLED'), { status: 403 });
+  if (ctx.profile.active_session_id && ctx.profile.active_session_id !== ctx.sessionId) {
+    throw Object.assign(new Error('SESSION_REPLACED'), { status: 401 });
+  }
   return ctx as typeof ctx & { user: NonNullable<typeof ctx.user>; profile: AppProfile };
 }
 
@@ -50,6 +61,7 @@ export function authErrorResponse(error: unknown) {
   const status = err.status || 500;
   if (err.message === 'UNAUTHENTICATED') return { status, message: 'Vui long dang nhap.' };
   if (err.message === 'ACCOUNT_DISABLED') return { status, message: 'Tai khoan da bi khoa.' };
+  if (err.message === 'SESSION_REPLACED') return { status, message: 'Tai khoan nay da dang nhap o noi khac.' };
   if (err.message === 'ADMIN_REQUIRED') return { status, message: 'Can quyen admin.' };
   return { status, message: err.message || 'Loi he thong.' };
 }

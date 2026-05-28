@@ -195,6 +195,7 @@ const DAI_ALIAS_NAM = {
   ctho: 'Cần Thơ',
   cth: 'Cần Thơ',
   st: 'Sóc Trăng',
+  str: 'Sóc Trăng',
   soctrang: 'Sóc Trăng',
   'soc trang': 'Sóc Trăng',
   strang: 'Sóc Trăng',

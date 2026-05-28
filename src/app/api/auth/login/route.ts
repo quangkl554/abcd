@@ -1,9 +1,13 @@
 import { type NextRequest } from 'next/server';
+import { cookies } from 'next/headers';
+import { randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { jsonError, jsonOk } from '@/lib/http';
-import { usernameToEmail } from '@/lib/auth';
+import { XOSO_SESSION_COOKIE, usernameToEmail } from '@/lib/auth';
 
 export const runtime = 'nodejs';
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,18 +22,41 @@ export async function POST(request: NextRequest) {
 
     if (error || !data.user) return jsonError('Sai tai khoan hoac mat khau.', 401);
 
-    const { data: profile } = await supabase
+    const admin = createAdminClient();
+    const { data: profile, error: profileError } = await admin
       .from('profiles')
-      .select('user_id, username, role, active')
+      .select('*')
       .eq('user_id', data.user.id)
       .single();
+    if (profileError) throw profileError;
 
     if (!profile?.active) {
       await supabase.auth.signOut();
       return jsonError('Tai khoan da bi khoa.', 403);
     }
 
-    return jsonOk({ profile });
+    const sessionId = randomUUID();
+    const { data: updatedProfile, error: sessionError } = await admin
+      .from('profiles')
+      .update({
+        active_session_id: sessionId,
+        active_session_at: new Date().toISOString(),
+      })
+      .eq('user_id', data.user.id)
+      .select('*')
+      .single();
+    if (sessionError) throw sessionError;
+
+    const cookieStore = await cookies();
+    cookieStore.set(XOSO_SESSION_COOKIE, sessionId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: SESSION_MAX_AGE,
+    });
+
+    return jsonOk({ profile: updatedProfile });
   } catch (error) {
     return jsonError((error as Error).message || 'Khong dang nhap duoc.', 400);
   }
