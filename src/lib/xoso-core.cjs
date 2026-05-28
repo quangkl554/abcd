@@ -344,6 +344,162 @@ const DAI_ALIAS_TRUNG = {
   ktu: 'Kon Tum',
 };
 
+const DAI_ALIAS_BAC = {
+  mb: 'Miền Bắc',
+  bac: 'Miền Bắc',
+  mienbac: 'Miền Bắc',
+  'mien bac': 'Miền Bắc',
+};
+
+addDaiAliases(DAI_ALIAS_BAC, {
+  'Miền Bắc': ['mbac', 'xsmb', 'bacbo', 'bac bo', 'hn', 'hanoi', 'ha noi', 'thudo', 'thu do'],
+});
+
+addDaiAliases(DAI_ALIAS_NAM, {
+  'TP.HCM': ['tph', 'tphochiminh', 'tp ho chi minh', 'ho chi minh', 'hochiminh', 'hcmcity', 'tp sg', 'tpsg', 'sai g', 'saigoncity'],
+  'Đồng Tháp': ['dthp', 'dongth', 'dong t', 'd thap', 'dtap', 'dongth'],
+  'Cà Mau': ['cma', 'c mau', 'cam', 'camau1'],
+  'Bến Tre': ['bte', 'b tre', 'bentre1', 'ben t'],
+  'Vũng Tàu': ['vtu', 'vta', 'v tau', 'br vt', 'baria', 'ba ria', 'bariavungtau', 'ba ria vung tau'],
+  'Bạc Liêu': ['bcl', 'bacl', 'bac l', 'b lieu', 'blieu1', 'baclieu2'],
+  'Đồng Nai': ['dnai1', 'd nai', 'dong n', 'dongn', 'nai'],
+  'Cần Thơ': ['cnt', 'c tho', 'can t', 'canth', 'ctho1'],
+  'Sóc Trăng': ['sct', 'sctr', 'soc tr', 's trang', 'soctr', 'soc t'],
+  'Tây Ninh': ['tni', 't ninh', 'tay n', 'tayn'],
+  'An Giang': ['agi', 'a giang', 'an g', 'ang'],
+  'Bình Thuận': ['bthn', 'b thuan', 'binh th', 'binhth', 'bthuan1'],
+  'Vĩnh Long': ['vlg', 'v long', 'vinh l', 'vinhl'],
+  'Bình Dương': ['bdu', 'bdg', 'b duong', 'binh d', 'sobe', 'songbe', 'song be'],
+  'Trà Vinh': ['trv', 'trvinh', 't vinh', 'tra v'],
+  'Long An': ['loga', 'l an', 'long a', 'longa'],
+  'Bình Phước': ['bphc', 'bpoc', 'b phuoc', 'binh p', 'binhp'],
+  'Hậu Giang': ['hgi', 'h giang', 'hau g', 'haug'],
+  'Tiền Giang': ['tgi', 't giang', 'tien g', 'tieng'],
+  'Kiên Giang': ['kgi', 'k giang', 'kien g', 'kieng'],
+  'Đà Lạt': ['dlat', 'dal', 'd lat', 'l dong', 'ldg', 'lamd'],
+});
+
+addDaiAliases(DAI_ALIAS_TRUNG, {
+  'TT.Huế': ['tth', 'tt hue', 't hue', 'thua thien', 'thua thien h', 'tth'],
+  'Phú Yên': ['pye', 'p yen', 'phu y', 'phuy'],
+  'Đắk Lắk': ['dkl', 'd lak', 'dak l', 'daklac', 'dak lac', 'dacl', 'd lac'],
+  'Quảng Nam': ['qnm', 'q nam', 'quang n', 'qnam1'],
+  'Đà Nẵng': ['dana', 'd nang', 'da n', 'dan'],
+  'Khánh Hòa': ['khh', 'k h', 'k hoa', 'khanh h', 'nha trang'],
+  'Bình Định': ['bdi1', 'b dinh', 'binh d', 'binhd'],
+  'Quảng Trị': ['qtr', 'q tri', 'quang t', 'quangt'],
+  'Quảng Bình': ['qbi', 'q binh', 'quang b', 'quangb'],
+  'Gia Lai': ['g lai', 'gia l', 'gla1'],
+  'Ninh Thuận': ['nthn', 'n thuan', 'ninh th', 'ninhth'],
+  'Quảng Ngãi': ['qnga', 'q ngai', 'quang ng', 'quangn'],
+  'Đắk Nông': ['dkn', 'd nong', 'dak n', 'dakno', 'dacno'],
+  'Kon Tum': ['ktm', 'k tum', 'kon t', 'kont'],
+});
+
+const DAI_PHRASE_ALIAS_BAC = {
+  'mien bac': 'mienbac',
+  'bac bo': 'bacbo',
+  'ha noi': 'hanoi',
+  'thu do': 'thudo',
+};
+
+const DAI_PHRASE_ALIAS_NAM = {
+  'tp ho chi minh': 'tphochiminh',
+  'ho chi minh': 'hochiminh',
+  'tp sg': 'tpsg',
+  'sai g': 'saigon',
+  'd thap': 'dthap',
+  'dong t': 'dongthap',
+  'c mau': 'camau',
+  'b tre': 'bentre',
+  'v tau': 'vungtau',
+  'br vt': 'brvt',
+  'ba ria': 'baria',
+  'ba ria vung tau': 'bariavungtau',
+  'bac l': 'baclieu',
+  'b lieu': 'blieu',
+  'd nai': 'dongnai',
+  'dong n': 'dongnai',
+  'c tho': 'cantho',
+  'can t': 'cantho',
+  's trang': 'soctrang',
+  'soc tr': 'soctrang',
+  'soc t': 'soctrang',
+  't ninh': 'tayninh',
+  'tay n': 'tayninh',
+  'a giang': 'angiang',
+  'an g': 'angiang',
+  'b thuan': 'binhthuan',
+  'binh th': 'binhthuan',
+  'v long': 'vinhlong',
+  'vinh l': 'vinhlong',
+  'b duong': 'binhduong',
+  'binh d': 'binhduong',
+  'song be': 'songbe',
+  't vinh': 'travinh',
+  'tra v': 'travinh',
+  'l an': 'longan',
+  'long a': 'longan',
+  'b phuoc': 'binhphuoc',
+  'binh p': 'binhphuoc',
+  'h giang': 'haugiang',
+  'hau g': 'haugiang',
+  't giang': 'tiengiang',
+  'tien g': 'tiengiang',
+  'k giang': 'kiengiang',
+  'kien g': 'kiengiang',
+  'd lat': 'dalat',
+  'l dong': 'lamdong',
+};
+
+const DAI_PHRASE_ALIAS_TRUNG = {
+  'tt hue': 'hue',
+  't hue': 'hue',
+  'thua thien': 'hue',
+  'p yen': 'phuyen',
+  'phu y': 'phuyen',
+  'd lak': 'daklak',
+  'dak l': 'daklak',
+  'dak lac': 'daklac',
+  'd lac': 'daclac',
+  'q nam': 'quangnam',
+  'quang n': 'quangnam',
+  'd nang': 'danang',
+  'da n': 'danang',
+  'k h': 'khanhhoa',
+  'k hoa': 'khanhhoa',
+  'khanh h': 'khanhhoa',
+  'nha trang': 'nhatrang',
+  'b dinh': 'binhdinh',
+  'binh d': 'binhdinh',
+  'q tri': 'quangtri',
+  'quang t': 'quangtri',
+  'q binh': 'quangbinh',
+  'quang b': 'quangbinh',
+  'g lai': 'gialai',
+  'gia l': 'gialai',
+  'n thuan': 'ninhthuan',
+  'ninh th': 'ninhthuan',
+  'q ngai': 'quangngai',
+  'quang ng': 'quangngai',
+  'd nong': 'daknong',
+  'dak n': 'daknong',
+  'k tum': 'kontum',
+  'kon t': 'kontum',
+};
+
+function addDaiAliases(target, groups) {
+  for (const [dai, aliases] of Object.entries(groups)) {
+    for (const alias of aliases) {
+      const normalized = normalizeVN(alias).trim();
+      const compact = compactKey(alias);
+      for (const key of [normalized, compact]) {
+        if (key && !target[key]) target[key] = dai;
+      }
+    }
+  }
+}
+
 const SCHEDULE_NAM = {
   2: ['TP.HCM', 'Đồng Tháp', 'Cà Mau'],
   3: ['Bến Tre', 'Vũng Tàu', 'Bạc Liêu'],
@@ -379,12 +535,7 @@ const CONFIGS = {
     region: REGION.BAC,
     name: 'Miền Bắc',
     daiList: ['Miền Bắc'],
-    daiAlias: {
-      mb: 'Miền Bắc',
-      bac: 'Miền Bắc',
-      mienbac: 'Miền Bắc',
-      'mien bac': 'Miền Bắc',
-    },
+    daiAlias: DAI_ALIAS_BAC,
     schedule: { MB: ['Miền Bắc'] },
     defaultActiveDai: ['Miền Bắc'],
     prizeRows: GIAI_BAC,
@@ -842,8 +993,11 @@ function preprocessLine(line, region) {
     '3 d': '3d',
     '2 d': '2d',
   };
+  const cfgRegion = getConfig(region).region;
   const regionMap =
-    getConfig(region).region === REGION.TRUNG
+    cfgRegion === REGION.BAC
+      ? DAI_PHRASE_ALIAS_BAC
+      : cfgRegion === REGION.TRUNG
       ? {
           'tt hue': 'hue',
           'thua thien hue': 'hue',
@@ -864,6 +1018,7 @@ function preprocessLine(line, region) {
           'dak nong': 'dno',
           'dac nong': 'dno',
           'kon tum': 'kt',
+          ...DAI_PHRASE_ALIAS_TRUNG,
         }
       : {
           'tp hcm': 'tphcm',
@@ -893,6 +1048,7 @@ function preprocessLine(line, region) {
           'kien giang': 'kiengiang',
           'da lat': 'dalat',
           'lam dong': 'lamdong',
+          ...DAI_PHRASE_ALIAS_NAM,
         };
   for (const [k, v] of Object.entries({ ...commonMap, ...regionMap })) {
     s = s.replace(new RegExp(`\\b${k}\\b`, 'g'), v);

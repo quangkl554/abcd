@@ -422,6 +422,84 @@ test('parse station aliases without confusing bet type shortcuts', () => {
   assert.deepEqual(trung.tickets[1].dai, ['Đắk Nông']);
 });
 
+test('expanded southern station aliases cover every station', () => {
+  const activeDai = core.getConfig('nam').daiList;
+  const cases = [
+    ['tph b 12 10n', 'TP.HCM'],
+    ['d thap b 12 10n', 'Đồng Tháp'],
+    ['cma b 12 10n', 'Cà Mau'],
+    ['bte b 12 10n', 'Bến Tre'],
+    ['vtu b 12 10n', 'Vũng Tàu'],
+    ['bcl b 12 10n', 'Bạc Liêu'],
+    ['d nai b 12 10n', 'Đồng Nai'],
+    ['cnt b 12 10n', 'Cần Thơ'],
+    ['s trang b 12 10n', 'Sóc Trăng'],
+    ['tni b 12 10n', 'Tây Ninh'],
+    ['agi b 12 10n', 'An Giang'],
+    ['bthn b 12 10n', 'Bình Thuận'],
+    ['vlg b 12 10n', 'Vĩnh Long'],
+    ['sobe b 12 10n', 'Bình Dương'],
+    ['trv b 12 10n', 'Trà Vinh'],
+    ['loga b 12 10n', 'Long An'],
+    ['bphc b 12 10n', 'Bình Phước'],
+    ['hgi b 12 10n', 'Hậu Giang'],
+    ['tgi b 12 10n', 'Tiền Giang'],
+    ['kgi b 12 10n', 'Kiên Giang'],
+    ['dlat b 12 10n', 'Đà Lạt'],
+  ];
+
+  for (const [line, expected] of cases) {
+    const parsed = core.parseTelegramEnvelope({
+      text: `nguoi 1:\n${line}`,
+      region: 'nam',
+      activeDai,
+      defaultDai: ['TP.HCM'],
+    });
+    assert.equal(parsed.tickets.length, 1, line);
+    assert.deepEqual(parsed.tickets[0].dai, [expected], line);
+    assert.deepEqual(parsed.warnings, [], line);
+  }
+});
+
+test('expanded central and northern station aliases cover every station', () => {
+  const activeDai = core.getConfig('trung').daiList;
+  const cases = [
+    ['tth b 12 10n', 'TT.Huế'],
+    ['p yen b 12 10n', 'Phú Yên'],
+    ['dkl b 12 10n', 'Đắk Lắk'],
+    ['qnm b 12 10n', 'Quảng Nam'],
+    ['dana b 12 10n', 'Đà Nẵng'],
+    ['nha trang b 12 10n', 'Khánh Hòa'],
+    ['b dinh b 12 10n', 'Bình Định'],
+    ['qtr b 12 10n', 'Quảng Trị'],
+    ['qbi b 12 10n', 'Quảng Bình'],
+    ['g lai b 12 10n', 'Gia Lai'],
+    ['n thuan b 12 10n', 'Ninh Thuận'],
+    ['q ngai b 12 10n', 'Quảng Ngãi'],
+    ['dkn b 12 10n', 'Đắk Nông'],
+    ['k tum b 12 10n', 'Kon Tum'],
+  ];
+
+  for (const [line, expected] of cases) {
+    const parsed = core.parseTelegramEnvelope({
+      text: `nguoi 1:\n${line}`,
+      region: 'trung',
+      activeDai,
+      defaultDai: ['TT.Huế'],
+    });
+    assert.equal(parsed.tickets.length, 1, line);
+    assert.deepEqual(parsed.tickets[0].dai, [expected], line);
+    assert.deepEqual(parsed.warnings, [], line);
+  }
+
+  const bac = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nhn b 12 10n\nbac bo dd 34 20n',
+    region: 'bac',
+  });
+  assert.deepEqual(bac.tickets.map(t => t.dai), [['Miền Bắc'], ['Miền Bắc']]);
+  assert.deepEqual(bac.warnings, []);
+});
+
 test('parse multiple station aliases before a ticket', () => {
   const parsed = core.parseTelegramEnvelope({
     text: 'nguoi 1:\ncm,dt b 75 10n',
