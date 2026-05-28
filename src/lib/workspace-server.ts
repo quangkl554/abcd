@@ -104,22 +104,50 @@ export function attachTicketSourceLines<TTicket extends TicketLike & { source_li
   tickets: TTicket[],
   messages: MessageLike[],
 ) {
-  const messageRaw = new Map(messages.map(message => [message.id, message.raw_text || '']));
+  const messageCache = new Map<string, { raw: string; normalizedLines: string[] }>();
+  for (const message of messages) {
+    const raw = message.raw_text || '';
+    const normalizedLines = raw.split(/\r?\n/).map(normalizeTicketLine);
+    messageCache.set(message.id, { raw, normalizedLines });
+  }
+
   return tickets.map(ticket => {
     if (typeof ticket.source_line_no === 'number') return ticket;
+    const msgId = (ticket as TicketLike & { ticket_message_id?: string }).ticket_message_id || '';
+    const cached = messageCache.get(msgId);
+    if (!cached || !ticket.source_text) {
+      return { ...ticket, source_line_no: null };
+    }
+    const source = normalizeTicketLine(ticket.source_text);
+    if (!source) return { ...ticket, source_line_no: null };
+
+    const index = cached.normalizedLines.findIndex(current => {
+      if (!current) return false;
+      return current === source || current.includes(source) || source.includes(current);
+    });
+
     return {
       ...ticket,
-      source_line_no: ticketSourceLine(ticket, messageRaw.get((ticket as TicketLike & { ticket_message_id?: string }).ticket_message_id || '') || ''),
+      source_line_no: index >= 0 ? index + 1 : null,
     };
   });
 }
 
 export function summarizeTickets(tickets: TicketLike[]): TicketTotals {
   const total = tickets.length;
-  const checked = tickets.filter(isChecked).length;
-  const hitCount = tickets.filter(isHit).length;
-  const xac = tickets.reduce((sum, ticket) => sum + numberValue(ticket.xac), 0);
-  const win = tickets.reduce((sum, ticket) => sum + numberValue(ticket.tien_thang), 0);
+  let checked = 0;
+  let hitCount = 0;
+  let xac = 0;
+  let win = 0;
+
+  for (let i = 0; i < total; i++) {
+    const ticket = tickets[i];
+    if (isChecked(ticket)) checked++;
+    if (isHit(ticket)) hitCount++;
+    xac += numberValue(ticket.xac);
+    win += numberValue(ticket.tien_thang);
+  }
+
   return {
     tickets: total,
     checked,

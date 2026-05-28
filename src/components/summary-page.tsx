@@ -205,6 +205,33 @@ export function SummaryPage() {
             <div className="metric metric-amber"><span>Lãi lỗ</span><strong className={totals.win - totals.xac >= 0 ? 'positive' : 'negative'}>{money(totals.win - totals.xac)}</strong><small>Theo ngày/miền</small></div>
           </section>
 
+          <section className="summary-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginTop: '16px', gap: '16px' }}>
+            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Số khách đã chơi</span>
+              <strong style={{ fontSize: '20px', color: 'var(--text-color)' }}>{summaryRows.length} khách</strong>
+              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Có vé cược hôm nay</small>
+            </div>
+            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Số đài hoạt động</span>
+              <strong style={{ fontSize: '20px', color: 'var(--text-color)' }}>
+                {region === 'all' 
+                  ? byRegion.filter(r => r.count > 0).length 
+                  : byDai.filter(d => d.count > 0).length || (workspace?.config.activeDai?.length || 0)} đài
+              </strong>
+              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Phát sinh vé cược</small>
+            </div>
+            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Giá trị vé trung bình</span>
+              <strong style={{ fontSize: '20px', color: 'var(--text-color)' }}>{money(totals.averageXac)}</strong>
+              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Xác trung bình trên vé</small>
+            </div>
+            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Hiệu suất trúng vé</span>
+              <strong style={{ fontSize: '20px', color: '#10B981' }}>{totals.hitRate}%</strong>
+              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{totals.hitCount} / {totals.checked || totals.tickets} vé đã dò</small>
+            </div>
+          </section>
+
           <section className="section">
             <div className="section-header">
               <div>

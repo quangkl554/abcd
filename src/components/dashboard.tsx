@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { memo, useEffect, useMemo, useState, useTransition, useCallback } from 'react';
 import {
   AlertTriangle,
   Calculator,
@@ -244,18 +244,23 @@ export function Dashboard() {
     await loadWorkspace({ force: true });
   }
 
-  function startEdit(ticket: Ticket) {
-    const sourceLineNumber = ticketSourceLine(ticket, filteredMessages);
+  const cancelEdit = useCallback(() => {
+    setEditingLine(null);
+    setEditingText('');
+  }, []);
+
+  const startEdit = useCallback((ticket: Ticket) => {
+    const sourceLineNumber = ticket.source_line_no ?? null;
     setEditingLine({
-      key: ticketLineKey(ticket, sourceLineNumber),
+      key: `${ticket.ticket_message_id}|${sourceLineNumber || ''}|${(ticket.source_text || '').replace(/\s+/g, ' ').trim().toLowerCase()}`,
       messageId: ticket.ticket_message_id,
       sourceText: ticket.source_text || '',
       sourceLineNumber,
     });
     setEditingText(ticket.source_text || '');
-  }
+  }, []);
 
-  async function saveEditedMessage() {
+  const saveEditedMessage = useCallback(async () => {
     if (!editingLine || !editingText.trim()) return setError('Tin sửa không được trống.');
     setNotice(`Đang thay dữ liệu của dòng ${editingLine.sourceLineNumber || '?'}...`);
     const response = await apiPost(`/api/ticket-messages/${editingLine.messageId}/reparse`, {
@@ -268,16 +273,16 @@ export function Dashboard() {
     setEditingLine(null);
     setEditingText('');
     await loadWorkspace({ force: true });
-  }
+  }, [editingLine, editingText, loadWorkspace]);
 
-  async function deleteMessage(ticket: Ticket) {
+  const deleteMessage = useCallback(async (ticket: Ticket) => {
     const ok = window.confirm('Xóa tin gốc này sẽ xóa toàn bộ vé được sinh ra từ tin đó. Bạn chắc chắn muốn xóa?');
     if (!ok) return;
     const response = await apiDelete(`/api/ticket-messages/${ticket.ticket_message_id}`);
     if (!response.ok) return setError(response.error);
     setNotice('Đã xóa tin và các vé liên quan.');
     await loadWorkspace({ force: true });
-  }
+  }, [loadWorkspace]);
 
   async function checkAll() {
     setNotice('Đang dò vé. Nếu chưa có KQ, hệ thống sẽ tự tải nguồn trước...');
@@ -389,26 +394,27 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTickets.map((ticket, index) => (
-                    <TableRows
-                      key={ticket.id}
-                      ticket={ticket}
-                      rowNumber={index + 1}
-                      messageNumber={messageOrder.get(ticket.ticket_message_id) || 0}
-                      sourceLineNumber={ticketSourceLine(ticket, filteredMessages)}
-                      lineKey={ticketLineKey(ticket, ticketSourceLine(ticket, filteredMessages))}
-                      editingLineKey={editingLine?.key || ''}
-                      editingText={editingText}
-                      setEditingText={setEditingText}
-                      startEdit={startEdit}
-                      cancelEdit={() => {
-                        setEditingLine(null);
-                        setEditingText('');
-                      }}
-                      saveEditedMessage={saveEditedMessage}
-                      deleteMessage={deleteMessage}
-                    />
-                  ))}
+                  {filteredTickets.map((ticket, index) => {
+                    const sourceLineNumber = ticket.source_line_no ?? null;
+                    const lineKey = `${ticket.ticket_message_id}|${sourceLineNumber || ''}|${(ticket.source_text || '').replace(/\s+/g, ' ').trim().toLowerCase()}`;
+                    return (
+                      <TableRows
+                        key={ticket.id}
+                        ticket={ticket}
+                        rowNumber={index + 1}
+                        messageNumber={messageOrder.get(ticket.ticket_message_id) || 0}
+                        sourceLineNumber={sourceLineNumber}
+                        lineKey={lineKey}
+                        editingLineKey={editingLine?.key || ''}
+                        editingText={editingText}
+                        setEditingText={setEditingText}
+                        startEdit={startEdit}
+                        cancelEdit={cancelEdit}
+                        saveEditedMessage={saveEditedMessage}
+                        deleteMessage={deleteMessage}
+                      />
+                    );
+                  })}
                 </tbody>
               </table>
               {!filteredTickets.length ? <div className="empty-state">Chưa có vé của khách này trong ngày/miền đang chọn.</div> : null}
@@ -475,7 +481,7 @@ export function Dashboard() {
   );
 }
 
-function TableRows(props: {
+const TableRows = memo(function TableRows(props: {
   ticket: Ticket;
   rowNumber: number;
   messageNumber: number;
@@ -504,7 +510,23 @@ function TableRows(props: {
         <td><TicketTypeBadge loai={props.ticket.loai} label={props.ticket.loai_label || props.ticket.loai} /></td>
         <td>{props.ticket.tien_dat}</td>
         <td>{money(props.ticket.xac)}</td>
-        <td><StatusBadge status={props.ticket.status} winAmount={props.ticket.tien_thang} /></td>
+        <td>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <StatusBadge status={props.ticket.status} winAmount={props.ticket.tien_thang} />
+            {(props.ticket.status === 'TRUNG' || props.ticket.tien_thang > 0) && props.ticket.ghi_chu && (
+              <div className="hit-details-inline" style={{ fontSize: '11px', color: '#10B981', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                {props.ticket.ghi_chu
+                  .split('|')
+                  .filter(Boolean)
+                  .map((item, idx) => (
+                    <div key={idx} style={{ lineHeight: '1.2' }}>
+                      Trúng {item}
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </td>
         <td>{props.ticket.tien_thang ? money(props.ticket.tien_thang) : ''}</td>
         <td className="source-cell"><HighlightedSource text={props.ticket.source_text} /></td>
         <td>
@@ -529,7 +551,7 @@ function TableRows(props: {
       ) : null}
     </>
   );
-}
+});
 
 function TicketTypeBadge({ loai, label }: { loai: string; label: string }) {
   return <span className={`type-badge type-${typeClass(loai)}`}>{label}</span>;

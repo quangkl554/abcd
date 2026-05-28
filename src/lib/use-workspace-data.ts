@@ -20,6 +20,16 @@ type UseWorkspaceOptions = {
 
 const workspaceCache = new Map<string, unknown>();
 
+function cacheSet(key: string, value: unknown) {
+  workspaceCache.set(key, value);
+  if (workspaceCache.size > 30) {
+    const oldestKey = workspaceCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      workspaceCache.delete(oldestKey);
+    }
+  }
+}
+
 function cacheKey(endpoint: WorkspaceEndpoint, date: string, region: WorkspaceRegion, paramsKey: string) {
   return `${endpoint}|${date}|${region}|${paramsKey}`;
 }
@@ -87,7 +97,7 @@ export function useWorkspaceData<TWorkspace>(date: string, region: WorkspaceRegi
         if (!cached) setError(payload.error || 'Không tải được dữ liệu.');
         return null;
       }
-      workspaceCache.set(key, payload);
+      cacheSet(key, payload);
       setWorkspace(payload as TWorkspace);
       return payload as TWorkspace;
     } catch (loadError) {

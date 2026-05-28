@@ -43,13 +43,23 @@ export async function parseAndStoreTicketMessage(args: {
     .single();
   if (messageError) throw messageError;
 
-  const ticketRows = (parsed.tickets || []).map(ticket => serializeTicket(ticket, {
-    ownerId: args.ownerId,
-    messageId: message.id,
-    date: args.date,
-    playerId,
-    sourceLineNo: computeSourceLineNo(ticket.sourceText || '', args.text),
-  }));
+  // Pre-split the message text for fast source line calculation
+  const textLines = args.text.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim().toLowerCase());
+  const ticketRows = (parsed.tickets || []).map(ticket => {
+    const source = (ticket.sourceText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    let sourceLineNo: number | null = null;
+    if (source) {
+      const idx = textLines.findIndex(line => line === source || line.includes(source) || source.includes(line));
+      if (idx >= 0) sourceLineNo = idx + 1;
+    }
+    return serializeTicket(ticket, {
+      ownerId: args.ownerId,
+      messageId: message.id,
+      date: args.date,
+      playerId,
+      sourceLineNo,
+    });
+  });
 
   let tickets: any[] = [];
   if (ticketRows.length) {
@@ -169,13 +179,22 @@ export async function reparseTicketMessage(args: {
     .single();
   if (updateError) throw updateError;
 
-  let ticketRows = (parsed.tickets || []).map(ticket => serializeTicket(ticket, {
-    ownerId: args.ownerId,
-    messageId: args.messageId,
-    date: message.message_date,
-    playerId,
-    sourceLineNo: computeSourceLineNo(ticket.sourceText || '', nextRawText),
-  }));
+  const nextRawTextLines = nextRawText.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim().toLowerCase());
+  let ticketRows = (parsed.tickets || []).map(ticket => {
+    const source = (ticket.sourceText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    let sourceLineNo: number | null = null;
+    if (source) {
+      const idx = nextRawTextLines.findIndex(line => line === source || line.includes(source) || source.includes(line));
+      if (idx >= 0) sourceLineNo = idx + 1;
+    }
+    return serializeTicket(ticket, {
+      ownerId: args.messageId,
+      messageId: args.messageId,
+      date: message.message_date,
+      playerId,
+      sourceLineNo,
+    });
+  });
 
   if (mode === 'append' && replacedSourceTexts.size) {
     await deleteTicketsBySourceText(args.supabase, args.ownerId, args.messageId, replacedSourceTexts);
@@ -256,13 +275,9 @@ async function removeExistingTicketRows(supabase: SupabaseLike, ownerId: string,
 }
 
 function ticketFingerprint(ticket: any) {
-  return JSON.stringify({
-    loai: ticket.loai || '',
-    dai: [...(ticket.dai || [])].sort(),
-    so_list: ticket.so_list || [],
-    tien_dat: Number(ticket.tien_dat || 0),
-    source_text: ticket.source_text || '',
-  });
+  const sortedDai = Array.isArray(ticket.dai) ? [...ticket.dai].sort().join(',') : '';
+  const soList = Array.isArray(ticket.so_list) ? ticket.so_list.join(',') : '';
+  return `${ticket.loai || ''}|${sortedDai}|${soList}|${Number(ticket.tien_dat || 0)}|${ticket.source_text || ''}`;
 }
 
 async function findPlayer(supabase: SupabaseLike, ownerId: string, playerId: string) {
