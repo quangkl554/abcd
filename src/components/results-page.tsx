@@ -22,6 +22,7 @@ type Workspace = {
     regionName: string;
     activeDai: string[];
     resultSourceUrl: string;
+    resultSourceUrls: string[];
   };
   drawResults: DrawResult[];
   tickets: Array<{ id: string; status: string; tien_thang: number; xac: number }>;
@@ -107,9 +108,11 @@ export function ResultsPage() {
       const response = await apiPost('/api/draw-results/fetch', { date, region });
       if (!response.ok) return setError(response.error);
       if (response.needsManual) {
-        setNotice(`${response.reason} Nếu nguồn chưa đủ dữ liệu, hãy dùng khung dán tay bên dưới.`);
+        const tried = response.sourceAttempts?.length ? ` Đã thử ${response.sourceAttempts.length} nguồn.` : '';
+        setNotice(`${response.reason}${tried} Nếu nguồn chưa đủ dữ liệu, hãy dùng khung dán tay bên dưới.`);
       } else {
-        setNotice(options?.silent ? 'Đã tự lấy và lưu kết quả.' : 'Đã tải và lưu kết quả tự động.');
+        const tried = response.sourceAttempts?.length && response.sourceAttempts.length > 1 ? ` sau khi thử ${response.sourceAttempts.length} nguồn` : '';
+        setNotice(options?.silent ? `Đã tự lấy và lưu kết quả${tried}.` : `Đã tải và lưu kết quả tự động${tried}.`);
         await loadWorkspace({ force: true });
       }
     });
@@ -215,7 +218,14 @@ export function ResultsPage() {
                   {workspace?.config.resultSourceUrl || 'Chưa cấu hình'} <ExternalLink size={14} />
                 </a>
               </div>
-              <p>Hệ thống ưu tiên lấy từ URL này. Nếu nguồn đổi cấu trúc hoặc thiếu giải, dùng khung dán tay bên dưới.</p>
+              {(workspace?.config.resultSourceUrls || []).length > 1 ? (
+                <div className="source-list">
+                  {workspace?.config.resultSourceUrls.map((url, index) => (
+                    <a href={url} target="_blank" rel="noreferrer" key={`${url}-${index}`}>Nguồn {index + 1}: {url}</a>
+                  ))}
+                </div>
+              ) : null}
+              <p>Hệ thống thử lần lượt các URL đã cấu hình trong .env.local. Nếu tất cả nguồn đổi cấu trúc hoặc thiếu giải, dùng khung dán tay bên dưới.</p>
             </div>
           </section>
 

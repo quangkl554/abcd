@@ -57,7 +57,7 @@ export function AppHeader({ username, role, activePage }: AppHeaderProps) {
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
         <span className="badge user"><UserRound size={14} /> {username || 'user'}</span>
-        {role === 'admin' ? <Link className="btn soft" href="/admin"><Settings size={17} /> Admin</Link> : null}
+        {role === 'admin' ? <Link className="btn soft" href="/admin"><Settings size={17} /> Tạo user</Link> : null}
         <button className="btn icon soft" type="button" title="Đăng xuất" onClick={logout}><LogOut size={18} /></button>
       </div>
     </header>

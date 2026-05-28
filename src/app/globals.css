@@ -1026,6 +1026,19 @@ tr:hover td {
   line-height: 1.45;
 }
 
+.source-list {
+  display: grid;
+  gap: 6px;
+}
+
+.source-list a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--blue-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .hint-list,
 .summary-list {
   display: grid;

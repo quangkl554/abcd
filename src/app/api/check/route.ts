@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
           needsResults: true,
           checked: [],
           summary: [],
-          message: `${fetched.reason || 'Chưa có kết quả xổ số.'} Hãy vào trang Kết quả để dán tay.`,
+          sourceAttempts: fetched.sourceAttempts || [],
+          message: `${fetched.reason || 'Chưa có kết quả xổ số.'} Hãy vào trang Kết quả để kiểm tra nguồn hoặc dán tay.`,
         });
       }
       draws = fetched.drawResults || [];

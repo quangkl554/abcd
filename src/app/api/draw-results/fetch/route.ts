@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
     const region = input.region as Region;
     const result = await fetchAndStoreDrawResults({ supabase, ownerId: user.id, date: input.date, region });
     if (!result.ok) {
-      return jsonOk({ needsManual: true, reason: result.reason, rawText: result.rawText });
+      return jsonOk({ needsManual: true, reason: result.reason, rawText: result.rawText, sourceAttempts: result.sourceAttempts || [] });
     }
-    return jsonOk({ needsManual: false, drawResults: result.drawResults, activeDai: result.activeDai, source: result.source });
+    return jsonOk({ needsManual: false, drawResults: result.drawResults, activeDai: result.activeDai, source: result.source, sourceAttempts: result.sourceAttempts || [] });
   } catch (error) {
     const mapped = authErrorResponse(error);
     return jsonError(mapped.message, mapped.status || 400);

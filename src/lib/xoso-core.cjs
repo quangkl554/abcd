@@ -2408,6 +2408,9 @@ function chunkLongNumber(value, len) {
 
 function parseDrawResultText(text, region = REGION.NAM) {
   const cfg = getConfig(region);
+  const htmlDraw = parseDrawResultHtml(text, cfg);
+  if (htmlDraw && hasUsableDrawResults(cfg, htmlDraw.results)) return htmlDraw;
+
   const lines = String(text || '')
     .split(/\r?\n/)
     .map(line => line.trim())
@@ -2476,6 +2479,104 @@ function parseDrawResultText(text, region = REGION.NAM) {
     }
   }
   return { activeDai, results: normalizeDrawResults(results, region) };
+}
+
+function parseDrawResultHtml(text, cfg) {
+  const html = String(text || '');
+  if (!/<table[\s>]/i.test(html)) return null;
+  return cfg.region === REGION.BAC ? parseSingleStationHtmlDraw(html, cfg) : parseMultiStationHtmlDraw(html, cfg);
+}
+
+function parseSingleStationHtmlDraw(html, cfg) {
+  const table = firstMatch(html, /<table[^>]*class=["'][^"']*(?:kqmb|colgiai)[^"']*["'][^>]*>[\s\S]*?<\/table>/i);
+  if (!table) return null;
+  const station = cfg.daiList[0];
+  const results = { [station]: {} };
+  for (const row of matchHtml(table, /<tr[^>]*>[\s\S]*?<\/tr>/gi)) {
+    const cells = htmlCells(row);
+    if (cells.length < 2) continue;
+    const key = prizeKeyFromLabel(stripHtml(cells[0]));
+    if (!key) continue;
+    const nums = cells.slice(1).flatMap(extractHtmlNumbers);
+    if (nums.length) results[station][key] = nums;
+  }
+  return { activeDai: [station], results: normalizeDrawResults(results, cfg.region) };
+}
+
+function parseMultiStationHtmlDraw(html, cfg) {
+  const table = firstMatch(html, /<table[^>]*class=["'][^"']*col(?:two|three|four)city[^"']*colgiai[^"']*["'][^>]*>[\s\S]*?<\/table>/i);
+  if (!table) return null;
+  const rows = matchHtml(table, /<tr[^>]*>[\s\S]*?<\/tr>/gi);
+  const header = rows.find(row => /<th[\s>]/i.test(row));
+  if (!header) return null;
+  const headerCells = htmlCells(header);
+  const stations = headerCells.slice(1).map(cell => detectDai(stripHtml(cell), cfg.region) || stripHtml(cell)).filter(Boolean);
+  if (!stations.length) return null;
+
+  const results = Object.fromEntries(stations.map(station => [station, {}]));
+  for (const row of rows) {
+    if (row === header) continue;
+    const cells = htmlCells(row);
+    if (cells.length < 2) continue;
+    const key = prizeKeyFromLabel(stripHtml(cells[0]));
+    if (!key) continue;
+    for (let i = 0; i < stations.length; i++) {
+      const nums = extractHtmlNumbers(cells[i + 1] || '');
+      if (nums.length) results[stations[i]][key] = nums;
+    }
+  }
+  return { activeDai: stations, results: normalizeDrawResults(results, cfg.region) };
+}
+
+function hasUsableDrawResults(cfg, results) {
+  const requiredKeys = cfg.prizeRows.map(row => row.key);
+  return Object.values(results || {}).some(prizes => requiredKeys.every(key => Array.isArray(prizes[key]) && prizes[key].length > 0));
+}
+
+function firstMatch(value, regex) {
+  const match = String(value || '').match(regex);
+  return match ? match[0] : '';
+}
+
+function matchHtml(value, regex) {
+  return [...String(value || '').matchAll(regex)].map(match => match[0]);
+}
+
+function htmlCells(rowHtml) {
+  return matchHtml(rowHtml, /<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi).map(cell => cell.replace(/^<t[dh][^>]*>/i, '').replace(/<\/t[dh]>$/i, ''));
+}
+
+function stripHtml(html) {
+  return decodeHtmlEntities(String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&zwj;|&#8205;/gi, '')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function extractHtmlNumbers(html) {
+  return (stripHtml(html).match(/\d+/g) || []).map(num => num.trim()).filter(Boolean);
+}
+
+function prizeKeyFromLabel(label) {
+  const normalized = normalizeVN(label).replace(/\s+/g, ' ').trim();
+  if (!normalized || normalized.includes('ma db')) return null;
+  if (/^(db|dac biet)$/.test(normalized)) return 'db';
+  const compact = normalized.replace(/\s+/g, '');
+  const match = compact.match(/^g(?:iai)?([1-8])$/);
+  return match ? `g${match[1]}` : null;
 }
 
 function summarizeTickets(tickets) {

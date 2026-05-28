@@ -4,7 +4,7 @@ import { jsonError, jsonOk } from '@/lib/http';
 import { dateSchema, regionSchema } from '@/lib/validation';
 import { getActiveDai, getConfig, type Region } from '@/lib/core';
 import { parseWorkDate } from '@/lib/dates';
-import { resultSourceUrl } from '@/lib/result-sources';
+import { resultSourceUrl, resultSourceUrls } from '@/lib/result-sources';
 
 export const runtime = 'nodejs';
 
@@ -67,7 +67,8 @@ export async function GET(request: NextRequest) {
         heSoXacDefault: cfg.heSoXacDefault,
         tyLeDefault: cfg.tyLeDefault,
         activeDai: getActiveDai(region, parseWorkDate(date)),
-        resultSourceUrl: resultSourceUrl(region),
+        resultSourceUrl: resultSourceUrl(region, date),
+        resultSourceUrls: resultSourceUrls(region, date),
       },
       players: players.data || [],
       messages: messages.data || [],

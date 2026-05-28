@@ -951,6 +951,43 @@ test('parse draw result text for single station', () => {
   assert.equal(draw.results['TP.HCM'].g8[0], '61');
 });
 
+test('parse az24-style html draw tables', () => {
+  const bac = core.parseDrawResultText(`
+    <table class="kqmb colgiai"><tbody>
+      <tr class="db"><td class="txt-giai">ĐB</td><td><span>61513</span></td></tr>
+      <tr><td class="txt-giai">G1</td><td><span>25473</span></td></tr>
+      <tr><td class="txt-giai">G2</td><td><span>05981</span><span>36393</span></td></tr>
+      <tr><td class="txt-giai">G3</td><td><span>01096</span><span>81866</span><span>19263</span><span>59097</span><span>46712</span><span>16436</span></td></tr>
+      <tr><td class="txt-giai">G4</td><td><span>5033</span><span>4807</span><span>8302</span><span>0840</span></td></tr>
+      <tr><td class="txt-giai">G5</td><td><span>2819</span><span>3011</span><span>7912</span><span>9554</span><span>2672</span><span>5294</span></td></tr>
+      <tr><td class="txt-giai">G6</td><td><span>440</span><span>550</span><span>613</span></td></tr>
+      <tr><td class="txt-giai">G7</td><td><span>45</span><span>27</span><span>16</span><span>15</span></td></tr>
+    </tbody></table>
+  `, 'bac');
+  assert.deepEqual(bac.activeDai, ['Miền Bắc']);
+  assert.equal(bac.results['Miền Bắc'].db[0], '61513');
+  assert.equal(bac.results['Miền Bắc'].g7[3], '15');
+
+  const nam = core.parseDrawResultText(`
+    <table class="colthreecity colgiai"><tbody>
+      <tr><th></th><th>Đồng Nai</th><th>Cần Thơ</th><th>Sóc Trăng</th></tr>
+      <tr><td>G8</td><td><div>&zwj;94</div></td><td><div>&zwj;94</div></td><td><div>&zwj;64</div></td></tr>
+      <tr><td>G7</td><td><div>658</div></td><td><div>305</div></td><td><div>253</div></td></tr>
+      <tr><td>G6</td><td><div>3673</div><div>7600</div><div>2736</div></td><td><div>9344</div><div>5063</div><div>2844</div></td><td><div>1768</div><div>1403</div><div>1401</div></td></tr>
+      <tr><td>G5</td><td><div>0383</div></td><td><div>8108</div></td><td><div>9662</div></td></tr>
+      <tr><td>G4</td><td><div>36468</div><div>42690</div><div>59907</div><div>79002</div><div>16104</div><div>04139</div><div>49404</div></td><td><div>58901</div><div>11094</div><div>26498</div><div>16955</div><div>22470</div><div>11765</div><div>62138</div></td><td><div>06330</div><div>75309</div><div>81483</div><div>79407</div><div>82549</div><div>82898</div><div>64403</div></td></tr>
+      <tr><td>G3</td><td><div>08584</div><div>73825</div></td><td><div>21924</div><div>93976</div></td><td><div>28384</div><div>89362</div></td></tr>
+      <tr><td>G2</td><td><div>95371</div></td><td><div>74920</div></td><td><div>89893</div></td></tr>
+      <tr><td>G1</td><td><div>36587</div></td><td><div>83469</div></td><td><div>61339</div></td></tr>
+      <tr><td>ĐB</td><td><div>738909</div></td><td><div>007940</div></td><td><div>094538</div></td></tr>
+    </tbody></table>
+  `, 'nam');
+  assert.deepEqual(nam.activeDai, ['Đồng Nai', 'Cần Thơ', 'Sóc Trăng']);
+  assert.equal(nam.results['Đồng Nai'].db[0], '738909');
+  assert.equal(nam.results['Cần Thơ'].g8[0], '94');
+  assert.equal(nam.results['Sóc Trăng'].g4.length, 7);
+});
+
 test('format report and split Telegram messages', () => {
   const parsed = core.parseTelegramEnvelope({
     text: 'người 1:\n61b 10n',
