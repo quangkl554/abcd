@@ -213,6 +213,48 @@ test('parse compact money/type tokens like 15ndd and dau1trieu', () => {
   assert.deepEqual(millionStake.tickets[0].soList, ['70']);
 });
 
+test('parse dotted shorthand stakes without leaking stake into next ticket', () => {
+  const inlineStake = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n10b 100n 01b 50. Đầu 10 01 200n 101 110 b 6n 610 b 28n 601b 10n',
+    region: 'nam',
+    activeDai: ['Bình Dương'],
+  });
+
+  assert.equal(inlineStake.tickets.length, 6);
+  assert.deepEqual(inlineStake.tickets[1].soList, ['01']);
+  assert.equal(inlineStake.tickets[1].loai, 'Lo');
+  assert.equal(inlineStake.tickets[1].tienDat, 50);
+  assert.equal(inlineStake.tickets[1].xac, 630000);
+  assert.deepEqual(inlineStake.tickets[2].soList, ['10', '01']);
+  assert.equal(inlineStake.tickets[2].loai, 'Dau');
+  assert.equal(inlineStake.tickets[2].tienDat, 200);
+  assert.equal(inlineStake.tickets[2].xac, 280000);
+
+  const endingStake = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n2đ phụ 17 71 13 31b 50n dd 17 280n 73 380n 84 62 b 35n dd 120.',
+    region: 'nam',
+    date: new Date(2026, 4, 29),
+  });
+  const dd = endingStake.tickets.find(t => t.loai === 'DauDuoi' && t.soList.join('|') === '84|62');
+  assert.ok(dd);
+  assert.equal(dd.tienDat, 120);
+  assert.equal(dd.xac, 672000);
+});
+
+test('range ending before glued type token expands before ticket type is applied', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n02b 120n dd 600n 002 den 902dd 75n',
+    region: 'nam',
+    activeDai: ['Bình Dương'],
+  });
+
+  const xiuChu = parsed.tickets.find(t => t.loai === 'XiuChu');
+  assert.ok(xiuChu);
+  assert.deepEqual(xiuChu.soList, ['002', '102', '202', '302', '402', '502', '602', '702', '802', '902']);
+  assert.equal(xiuChu.tienDat, 75);
+  assert.equal(xiuChu.xac, 1050000);
+});
+
 test('parse glued stake/type/stake tokens like 30ndd40n', () => {
   const parsed = core.parseTelegramEnvelope({
     text: 'nguoi 1:\nb 72 32 30ndd40n',

@@ -944,6 +944,10 @@ function preprocessLine(line, region) {
   let s = normalizeVN(line);
   s = s.replace(/\u20ab/g, 'd');
   s = s.replace(/[₫]/g, 'd');
+  s = s.replace(
+    /((?:^|\s)(?:\d{2,4})?(?:b|bl|dd|dc|dau|duoi|dui|xc|xdau|xdui|xduoi|xiuchu|xchu)\s+)(\d+(?:\.\d+)?)\.(?=\s+(?:b|bl|dd|dc|dau|duoi|dui|xc|xdau|xdui|xduoi|xiuchu|xchu)\b|\s*$)/g,
+    '$1$2n',
+  );
   s = s.replace(/\.(?=\d)/g, ' ').replace(/(?<=\d)\./g, ' ').replace(/\./g, ' ');
   s = s.replace(/[\(\[]/g, ' ( ').replace(/[\)\]]/g, ' ) ');
   s = s.replace(/[,;\-–—:+]/g, ' ');
@@ -1095,6 +1099,12 @@ function expandCompactTokens(tokens, region) {
     const numberTypeMoney = tok.match(/^(\d{2,4})([a-z]+)(\d+(?:\.\d+)?(?:n|k|d|m|diem|diểm|tr|trieu|triệu))$/);
     if (numberTypeMoney && normalizeTicketType(numberTypeMoney[2], region)) {
       expanded.push(numberTypeMoney[1], numberTypeMoney[2], numberTypeMoney[3]);
+      continue;
+    }
+
+    const numberType = tok.match(/^(\d{2,4})([a-z]+)$/);
+    if (numberType && normalizeTicketType(numberType[2], region)) {
+      expanded.push(numberType[1], numberType[2]);
       continue;
     }
 
