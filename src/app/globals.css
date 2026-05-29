@@ -462,6 +462,32 @@ p {
   min-width: 0;
 }
 
+.date-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.date-display {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 42px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  padding: 3px 5px;
+  outline: none;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.date-display:hover,
+.date-display:focus-visible {
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 28%, transparent);
+}
+
 .date-control span {
   display: inline-flex;
   align-items: center;
@@ -478,6 +504,120 @@ p {
   outline: none;
   font-weight: 900;
   min-width: 0;
+}
+
+.date-display strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  z-index: 80;
+  display: grid;
+  gap: 10px;
+  width: min(318px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  transform: translateX(-50%);
+}
+
+.calendar-popover::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  width: 12px;
+  height: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
+  border-top: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
+  background: var(--panel);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.calendar-head {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-head > div {
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+}
+
+.calendar-head b {
+  font-size: 15px;
+}
+
+.calendar-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.calendar-weekdays span {
+  justify-content: center;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.calendar-day {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.calendar-day:hover {
+  border-color: color-mix(in srgb, var(--blue) 26%, var(--line));
+  background: color-mix(in srgb, var(--blue) 9%, var(--panel));
+  transform: translateY(-1px);
+}
+
+.calendar-day.outside {
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+}
+
+.calendar-day.today {
+  border-color: color-mix(in srgb, var(--teal) 35%, var(--line));
+}
+
+.calendar-day.selected {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.calendar-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .date-step {
@@ -1401,19 +1541,20 @@ tr:hover td {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(15, 23, 42, 0.42);
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, #0f172a 46%, transparent);
+  backdrop-filter: blur(10px);
 }
 
 .modal-panel {
   display: grid;
-  gap: 12px;
-  width: min(460px, 100%);
-  padding: 16px;
-  border: 1px solid var(--line);
+  gap: 14px;
+  width: min(500px, 100%);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--line));
   border-radius: 8px;
   background: var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
 }
 
 .modal-head {
@@ -1421,6 +1562,9 @@ tr:hover td {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-soft) 72%, var(--blue) 9%), var(--panel));
 }
 
 .modal-head h2 {
@@ -1428,6 +1572,7 @@ tr:hover td {
   align-items: center;
   gap: 8px;
   font-size: 18px;
+  line-height: 1.2;
   font-weight: 900;
 }
 
@@ -1435,10 +1580,72 @@ tr:hover td {
   margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.45;
+}
+
+.modal-panel > .field,
+.modal-panel > .row,
+.modal-panel > .modal-actions {
+  margin-inline: 16px;
+}
+
+.modal-panel > .modal-actions,
+.modal-panel > .row:last-child {
+  margin-bottom: 16px;
+}
+
+.modal-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+}
+
+.modal-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 14%, var(--panel));
+  color: var(--amber);
 }
 
 .danger-modal {
   border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+}
+
+.danger-modal .modal-icon {
+  background: color-mix(in srgb, var(--red) 13%, var(--panel));
+  color: var(--red);
+}
+
+.warning-modal {
+  border-color: color-mix(in srgb, var(--amber) 42%, var(--line));
+}
+
+.primary-modal .modal-icon {
+  background: color-mix(in srgb, var(--blue) 13%, var(--panel));
+  color: var(--blue);
+}
+
+.confirm-field {
+  gap: 8px;
+}
+
+.confirm-input {
+  min-height: 44px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 1360px) {

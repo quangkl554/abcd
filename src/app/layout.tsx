@@ -3,10 +3,10 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Sổ vé 3 miền',
-    template: '%s | Sổ vé 3 miền',
+    default: 'Hệ thống tự động số',
+    template: '%s | Hệ thống tự động số',
   },
-  description: 'Sổ vé nội bộ để nhập tin, dò kết quả và tổng hợp lãi lỗ.',
+  description: 'Hệ thống nội bộ để nhập tin, dò kết quả và tổng hợp lãi lỗ.',
   icons: {
     icon: '/icon.svg',
   },

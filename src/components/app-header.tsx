@@ -39,9 +39,9 @@ export function AppHeader({ username, role, activePage }: AppHeaderProps) {
   return (
     <header className="topbar">
       <div className="brand">
-        <div className="brand-mark">3M</div>
+        <div className="brand-mark">Số</div>
         <div>
-          <div className="brand-title">Sổ vé 3 miền</div>
+          <div className="brand-title">Hệ thống tự động số</div>
           <div className="brand-subtitle">Nhập tin, dò kết quả, tổng hợp lãi lỗ</div>
         </div>
       </div>

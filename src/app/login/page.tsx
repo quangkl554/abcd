@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="login-shell">
       <section className="login-panel">
         <div>
-          <p className="eyebrow">Sổ vé 3 miền</p>
+          <p className="eyebrow">Hệ thống tự động số</p>
           <h1>Đăng nhập</h1>
           <p className="muted">Chỉ tài khoản được admin tạo mới vào được hệ thống. Mỗi tài khoản chỉ hoạt động ở một nơi tại một thời điểm.</p>
         </div>

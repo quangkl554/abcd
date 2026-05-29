@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Calculator, CalendarDays, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { Calculator, Download, ExternalLink, FileText, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { useWorkspaceData } from '@/lib/use-workspace-data';
+import { ActionDialog } from './action-dialog';
 import { AppHeader } from './app-header';
+import { WorkDatePicker } from './work-date-picker';
 
 type Region = 'nam' | 'trung' | 'bac';
 
@@ -32,6 +34,10 @@ type Workspace = {
   fetchReason?: string;
   sourceAttempts?: Array<{ source: string; ok: boolean; reason?: string }>;
 };
+
+type ResultsDialog =
+  | { type: 'delete-results'; label: string }
+  | { type: 'reset-day'; label: string };
 
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
@@ -73,6 +79,8 @@ export function ResultsPage() {
   const autoFetchKey = useRef('');
   const [manualKq, setManualKq] = useState('');
   const [notice, setNotice] = useState('');
+  const [dialog, setDialog] = useState<ResultsDialog | null>(null);
+  const [dialogConfirm, setDialogConfirm] = useState('');
   const [pending, startTransition] = useTransition();
 
   const totals = useMemo(() => {
@@ -146,23 +154,39 @@ export function ResultsPage() {
   }
 
   async function deleteDrawResults() {
-    const confirmText = window.prompt(`Nhập chính xác XOA KQ để xóa kết quả đã lưu của ${regionName(region)} ngày ${date}.`);
-    if (confirmText !== 'XOA KQ') return;
-    const response = await apiDelete('/api/draw-results', { date, region, confirm: confirmText });
-    if (!response.ok) return setError(response.error);
-    setNotice('Đã xóa kết quả xổ số của ngày/miền hiện tại.');
-    await loadWorkspace({ force: true });
+    setDialogConfirm('');
+    setDialog({ type: 'delete-results', label: `${regionName(region)} ngày ${date}` });
   }
 
   async function resetDayRegion() {
-    const confirmText = window.prompt(`Nhập chính xác XOA TAT CA để xóa toàn bộ vé, tin lỗi và kết quả của ${regionName(region)} ngày ${date}.`);
-    if (confirmText !== 'XOA TAT CA') return;
-    const response = await apiDelete('/api/workspace/reset', { scope: 'day-region', date, region, confirm: confirmText });
+    setDialogConfirm('');
+    setDialog({ type: 'reset-day', label: `${regionName(region)} ngày ${date}` });
+  }
+
+  async function confirmDialogAction() {
+    if (!dialog) return;
+    if (dialog.type === 'delete-results') {
+      if (dialogConfirm.trim() !== 'XOA KQ') return;
+      const response = await apiDelete('/api/draw-results', { date, region, confirm: dialogConfirm.trim() });
+      if (!response.ok) return setError(response.error);
+      setNotice('Đã xóa kết quả xổ số của ngày/miền hiện tại.');
+      setDialog(null);
+      setDialogConfirm('');
+      await loadWorkspace({ force: true });
+      return;
+    }
+
+    if (dialogConfirm.trim() !== 'XOA TAT CA') return;
+    const response = await apiDelete('/api/workspace/reset', { scope: 'day-region', date, region, confirm: dialogConfirm.trim() });
     if (!response.ok) return setError(response.error);
     setManualKq('');
     setNotice('Đã xóa toàn bộ dữ liệu của ngày/miền hiện tại.');
+    setDialog(null);
+    setDialogConfirm('');
     await loadWorkspace({ force: true });
   }
+
+  const dialogContent = resultsDialogContent(dialog);
 
   return (
     <main className="app-shell">
@@ -171,14 +195,7 @@ export function ResultsPage() {
       <div className="workspace results-workspace">
         <div className="main-flow">
           <section className={`control-panel ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
-            <div className="date-control">
-              <button className="date-step" type="button" title="Ngày trước" onClick={() => setDate(shiftDate(date, -1))}><ChevronLeft size={17} /></button>
-              <label>
-                <span><CalendarDays size={14} /> Ngày kết quả</span>
-                <input type="date" value={date} onChange={event => setDate(event.target.value)} />
-              </label>
-              <button className="date-step" type="button" title="Ngày sau" onClick={() => setDate(shiftDate(date, 1))}><ChevronRight size={17} /></button>
-            </div>
+            <WorkDatePicker label="Ngày kết quả" value={date} onChange={setDate} />
             <div className="region-control" role="tablist" aria-label="Chọn miền">
               {REGIONS.map(item => (
                 <button key={item.id} type="button" className={`region-tab ${region === item.id ? 'active' : ''}`} onClick={() => setRegion(item.id)}>
@@ -314,8 +331,46 @@ export function ResultsPage() {
           </section>
         </aside>
       </div>
+      {dialogContent ? (
+        <ActionDialog
+          open
+          title={dialogContent.title}
+          description={dialogContent.description}
+          confirmLabel={dialogContent.confirmLabel}
+          tone={dialogContent.tone}
+          requireText={dialogContent.requireText}
+          inputLabel="Mã xác nhận"
+          inputValue={dialogConfirm}
+          onInputChange={setDialogConfirm}
+          onCancel={() => {
+            setDialog(null);
+            setDialogConfirm('');
+          }}
+          onConfirm={confirmDialogAction}
+        />
+      ) : null}
     </main>
   );
+}
+
+function resultsDialogContent(dialog: ResultsDialog | null) {
+  if (!dialog) return null;
+  if (dialog.type === 'delete-results') {
+    return {
+      title: 'Xóa kết quả',
+      description: `Gõ đúng XOA KQ để xóa kết quả đã lưu của ${dialog.label}.`,
+      confirmLabel: 'Xóa KQ',
+      tone: 'warning' as const,
+      requireText: 'XOA KQ',
+    };
+  }
+  return {
+    title: 'Xóa dữ liệu ngày',
+    description: `Gõ đúng XOA TAT CA để xóa toàn bộ vé, tin lỗi và kết quả của ${dialog.label}.`,
+    confirmLabel: 'Xóa dữ liệu',
+    tone: 'danger' as const,
+    requireText: 'XOA TAT CA',
+  };
 }
 
 async function apiPost(url: string, body: unknown) {
@@ -346,13 +401,6 @@ function todayKey() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function shiftDate(value: string, days: number) {
-  const next = new Date(`${value}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  const offset = next.getTimezoneOffset() * 60_000;
-  return new Date(next.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function regionName(region: Region) {

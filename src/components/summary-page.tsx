@@ -5,9 +5,6 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BarChart3,
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   CircleDollarSign,
   FileText,
   Gauge,
@@ -20,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useWorkspaceData } from '@/lib/use-workspace-data';
 import { AppHeader } from './app-header';
+import { WorkDatePicker } from './work-date-picker';
 
 type Region = 'nam' | 'trung' | 'bac';
 type RegionScope = Region | 'all';
@@ -172,14 +170,7 @@ export function SummaryPage() {
       <div className="workspace summary-workspace">
         <div className="main-flow">
           <section className={`control-panel ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
-            <div className="date-control">
-              <button className="date-step" type="button" title="Ngày trước" onClick={() => setDate(shiftDate(date, -1))}><ChevronLeft size={17} /></button>
-              <label>
-                <span><CalendarDays size={14} /> Ngày tổng hợp</span>
-                <input type="date" value={date} onChange={event => setDate(event.target.value)} />
-              </label>
-              <button className="date-step" type="button" title="Ngày sau" onClick={() => setDate(shiftDate(date, 1))}><ChevronRight size={17} /></button>
-            </div>
+            <WorkDatePicker label="Ngày tổng hợp" value={date} onChange={setDate} />
             <div className="region-control" role="tablist" aria-label="Chọn miền">
               {REGIONS.map(item => (
                 <button key={item.id} type="button" className={`region-tab ${region === item.id ? 'active' : ''}`} onClick={() => setRegion(item.id)}>
@@ -463,13 +454,6 @@ function todayKey() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function shiftDate(value: string, days: number) {
-  const next = new Date(`${value}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  const offset = next.getTimezoneOffset() * 60_000;
-  return new Date(next.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function regionName(region: RegionScope) {

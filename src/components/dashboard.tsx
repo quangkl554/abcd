@@ -5,10 +5,7 @@ import { memo, useEffect, useMemo, useState, useTransition, useCallback } from '
 import {
   AlertTriangle,
   Calculator,
-  CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Edit3,
   ListChecks,
   Plus,
@@ -20,7 +17,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useWorkspaceData } from '@/lib/use-workspace-data';
+import { ActionDialog } from './action-dialog';
 import { AppHeader } from './app-header';
+import { WorkDatePicker } from './work-date-picker';
 
 type Region = 'nam' | 'trung' | 'bac';
 
@@ -92,6 +91,11 @@ type EditingLine = {
   sourceLineNumber: number | null;
 };
 
+type DashboardDialog =
+  | { type: 'delete-player'; playerId: string; playerName: string }
+  | { type: 'delete-message'; messageId: string }
+  | { type: 'reset'; scope: 'day-region' | 'all'; label: string };
+
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
   { id: 'trung', label: 'Miền Trung', short: 'Trung' },
@@ -122,6 +126,8 @@ export function Dashboard() {
   const [editingLine, setEditingLine] = useState<EditingLine | null>(null);
   const [editingText, setEditingText] = useState('');
   const [notice, setNotice] = useState('');
+  const [dialog, setDialog] = useState<DashboardDialog | null>(null);
+  const [dialogConfirm, setDialogConfirm] = useState('');
   const [pending, startTransition] = useTransition();
 
   const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
@@ -224,21 +230,13 @@ export function Dashboard() {
 
   async function deletePlayer() {
     if (!activePlayer) return;
-    const ok = window.confirm(`Xóa khách "${activePlayer.name}" khỏi danh sách? Vé cũ vẫn được giữ lại để xem lịch sử.`);
-    if (!ok) return;
-    const response = await apiDelete('/api/players', { id: activePlayer.id });
-    if (!response.ok) return setError(response.error);
-    setNotice(`Đã xóa khách ${activePlayer.name} khỏi danh sách.`);
-    const nextPlayer = (workspace?.players || []).find(player => player.id !== activePlayer.id);
-    setPlayerSelectionTouched(true);
-    setSelectedPlayerId(nextPlayer?.id || '');
-    await loadWorkspace({ force: true });
+    setDialog({ type: 'delete-player', playerId: activePlayer.id, playerName: activePlayer.name });
   }
 
   async function reparseIssue(issue: ParseIssue) {
     const correctedText = (issueDrafts[issue.id] || issue.source_text || '').trim();
     if (!correctedText) return setError('Tin sửa không được trống.');
-    setNotice('Đang parse lại và thay dữ liệu...');
+    setNotice('Đang sửa lại và thay dữ liệu...');
     const response = await apiPost(`/api/ticket-messages/${issue.ticket_message_id}/reparse`, {
       correctedText,
       issueId: issue.id,
@@ -294,13 +292,8 @@ export function Dashboard() {
   }, [editingLine, editingText, loadWorkspace]);
 
   const deleteMessage = useCallback(async (ticket: Ticket) => {
-    const ok = window.confirm('Xóa tin gốc này sẽ xóa toàn bộ vé được sinh ra từ tin đó. Bạn chắc chắn muốn xóa?');
-    if (!ok) return;
-    const response = await apiDelete(`/api/ticket-messages/${ticket.ticket_message_id}`);
-    if (!response.ok) return setError(response.error);
-    setNotice('Đã xóa tin và các vé liên quan.');
-    await loadWorkspace({ force: true });
-  }, [loadWorkspace]);
+    setDialog({ type: 'delete-message', messageId: ticket.ticket_message_id });
+  }, []);
 
   async function checkAll() {
     setNotice('Đang dò vé. Nếu chưa có KQ, hệ thống sẽ tự tải nguồn trước...');
@@ -315,16 +308,46 @@ export function Dashboard() {
 
   async function resetData(scope: 'day-region' | 'all') {
     const label = scope === 'all' ? 'toàn bộ dữ liệu của tài khoản này' : `dữ liệu ngày ${date} - ${regionName(region)}`;
-    const confirmText = window.prompt(`Nhập chính xác XOA TAT CA để xóa ${label}. Thao tác này không hoàn tác.`);
-    if (confirmText !== 'XOA TAT CA') return;
-    const body = scope === 'all'
-      ? { scope, confirm: confirmText }
-      : { scope, confirm: confirmText, date, region };
+    setDialogConfirm('');
+    setDialog({ type: 'reset', scope, label });
+  }
+
+  async function confirmDialogAction() {
+    if (!dialog) return;
+    if (dialog.type === 'delete-player') {
+      const response = await apiDelete('/api/players', { id: dialog.playerId });
+      if (!response.ok) return setError(response.error);
+      setNotice(`Đã xóa khách ${dialog.playerName} khỏi danh sách.`);
+      const nextPlayer = (workspace?.players || []).find(player => player.id !== dialog.playerId);
+      setPlayerSelectionTouched(true);
+      setSelectedPlayerId(nextPlayer?.id || '');
+      setDialog(null);
+      await loadWorkspace({ force: true });
+      return;
+    }
+
+    if (dialog.type === 'delete-message') {
+      const response = await apiDelete(`/api/ticket-messages/${dialog.messageId}`);
+      if (!response.ok) return setError(response.error);
+      setNotice('Đã xóa tin và các vé liên quan.');
+      setDialog(null);
+      await loadWorkspace({ force: true });
+      return;
+    }
+
+    if (dialogConfirm.trim() !== 'XOA TAT CA') return;
+    const body = dialog.scope === 'all'
+      ? { scope: dialog.scope, confirm: dialogConfirm.trim() }
+      : { scope: dialog.scope, confirm: dialogConfirm.trim(), date, region };
     const response = await apiDelete('/api/workspace/reset', body);
     if (!response.ok) return setError(response.error);
-    setNotice(scope === 'all' ? 'Đã xóa toàn bộ dữ liệu của tài khoản.' : 'Đã xóa dữ liệu ngày/miền hiện tại.');
+    setNotice(dialog.scope === 'all' ? 'Đã xóa toàn bộ dữ liệu của tài khoản.' : 'Đã xóa dữ liệu ngày/miền hiện tại.');
+    setDialog(null);
+    setDialogConfirm('');
     await loadWorkspace({ force: true });
   }
+
+  const dialogContent = dashboardDialogContent(dialog);
 
   return (
     <main className="app-shell">
@@ -333,14 +356,7 @@ export function Dashboard() {
       <div className="workspace">
         <div className="main-flow">
           <section className={`control-panel ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
-            <div className="date-control">
-              <button className="date-step" type="button" title="Ngày trước" onClick={() => setDate(shiftDate(date, -1))}><ChevronLeft size={17} /></button>
-              <label>
-                <span><CalendarDays size={14} /> Ngày làm việc</span>
-                <input type="date" value={date} onChange={event => setDate(event.target.value)} />
-              </label>
-              <button className="date-step" type="button" title="Ngày sau" onClick={() => setDate(shiftDate(date, 1))}><ChevronRight size={17} /></button>
-            </div>
+            <WorkDatePicker label="Ngày làm việc" value={date} onChange={setDate} />
             <div className="region-control" role="tablist" aria-label="Chọn miền">
               {REGIONS.map(item => (
                 <button key={item.id} type="button" className={`region-tab ${region === item.id ? 'active' : ''}`} onClick={() => setRegion(item.id)}>
@@ -461,7 +477,7 @@ export function Dashboard() {
                       onChange={event => setIssueDrafts(current => ({ ...current, [issue.id]: event.target.value }))}
                     />
                     <div className="row action-row">
-                      <button className="btn primary" type="button" onClick={() => reparseIssue(issue)}><RefreshCw size={16} /> Parse lại</button>
+                      <button className="btn primary" type="button" onClick={() => reparseIssue(issue)}><RefreshCw size={16} /> Sửa lại</button>
                       <button className="btn soft" type="button" onClick={() => ignoreIssue(issue)}><XCircle size={16} /> Bỏ qua</button>
                     </div>
                   </div>
@@ -495,8 +511,54 @@ export function Dashboard() {
           </section>
         </aside>
       </div>
+      {dialogContent ? (
+        <ActionDialog
+          open
+          title={dialogContent.title}
+          description={dialogContent.description}
+          confirmLabel={dialogContent.confirmLabel}
+          tone={dialogContent.tone}
+          requireText={dialogContent.requireText}
+          inputLabel={dialogContent.inputLabel}
+          inputValue={dialogConfirm}
+          onInputChange={setDialogConfirm}
+          onCancel={() => {
+            setDialog(null);
+            setDialogConfirm('');
+          }}
+          onConfirm={confirmDialogAction}
+        />
+      ) : null}
     </main>
   );
+}
+
+function dashboardDialogContent(dialog: DashboardDialog | null) {
+  if (!dialog) return null;
+  if (dialog.type === 'delete-player') {
+    return {
+      title: 'Xóa khách',
+      description: `Xóa khách "${dialog.playerName}" khỏi danh sách. Vé cũ vẫn được giữ để xem lịch sử.`,
+      confirmLabel: 'Xóa khách',
+      tone: 'danger' as const,
+    };
+  }
+  if (dialog.type === 'delete-message') {
+    return {
+      title: 'Xóa tin gốc',
+      description: 'Toàn bộ vé được sinh ra từ tin này sẽ bị xóa. Thao tác này không hoàn tác.',
+      confirmLabel: 'Xóa tin',
+      tone: 'danger' as const,
+    };
+  }
+  return {
+    title: 'Xóa dữ liệu',
+    description: `Gõ đúng XOA TAT CA để xóa ${dialog.label}. Thao tác này không hoàn tác.`,
+    confirmLabel: 'Xóa dữ liệu',
+    tone: dialog.scope === 'all' ? 'danger' as const : 'warning' as const,
+    requireText: 'XOA TAT CA',
+    inputLabel: 'Mã xác nhận',
+  };
 }
 
 const TableRows = memo(function TableRows(props: {
@@ -752,13 +814,6 @@ function todayKey() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function shiftDate(value: string, days: number) {
-  const next = new Date(`${value}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  const offset = next.getTimezoneOffset() * 60_000;
-  return new Date(next.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function regionName(region: Region) {
