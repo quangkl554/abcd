@@ -69,6 +69,7 @@ export function useWorkspaceData<TWorkspace>(date: string, region: WorkspaceRegi
 
     const key = cacheKey(endpoint, queryDate, queryRegion, paramsKey);
     const cached = !options?.force ? (workspaceCache.get(key) as TWorkspace | undefined) : undefined;
+    const keepExistingWorkspace = Boolean(options?.force && !options?.targetDate && !options?.targetRegion);
 
     if (cached) {
       setWorkspace(cached);
@@ -82,7 +83,7 @@ export function useWorkspaceData<TWorkspace>(date: string, region: WorkspaceRegi
 
     if (!cached && !options?.silent) setLoading(true);
     if (!cached) {
-      setWorkspace(null);
+      if (!keepExistingWorkspace) setWorkspace(null);
       setError('');
     }
 

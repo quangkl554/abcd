@@ -158,9 +158,10 @@ export async function reparseTicketMessage(args: {
     if (issueUpdateError) throw issueUpdateError;
   }
 
+  const replacementSourceText = issueSourceText || sourceText;
   const nextRawText = mode === 'append'
-    ? sourceText
-      ? replaceSourceLineText(message.raw_text || '', sourceText, args.correctedText)
+    ? replacementSourceText
+      ? replaceSourceLineText(message.raw_text || '', replacementSourceText, args.correctedText)
       : appendCorrectionText(message.raw_text || '', args.correctedText)
     : args.correctedText;
 
@@ -188,7 +189,7 @@ export async function reparseTicketMessage(args: {
       if (idx >= 0) sourceLineNo = idx + 1;
     }
     return serializeTicket(ticket, {
-      ownerId: args.messageId,
+      ownerId: args.ownerId,
       messageId: args.messageId,
       date: message.message_date,
       playerId,

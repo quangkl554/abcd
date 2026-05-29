@@ -115,6 +115,7 @@ export function Dashboard() {
   const [region, setRegion] = useState<Region>('nam');
   const { workspace, loading, error, setError, loadWorkspace } = useWorkspaceData<Workspace>(date, region, { endpoint: 'app' });
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
+  const [playerSelectionTouched, setPlayerSelectionTouched] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [ticketText, setTicketText] = useState('');
   const [issueDrafts, setIssueDrafts] = useState<Record<string, string>>({});
@@ -157,15 +158,29 @@ export function Dashboard() {
   }, [filteredTickets]);
 
   useEffect(() => {
-    const players = workspace?.players || [];
+    if (!workspace) return;
+    const players = workspace.players || [];
     if (!players.length) {
       if (selectedPlayerId) setSelectedPlayerId('');
       return;
     }
-    if (!selectedPlayerId || !players.some(player => player.id === selectedPlayerId)) {
+
+    if (selectedPlayerId) {
+      if (!players.some(player => player.id === selectedPlayerId)) {
+        setSelectedPlayerId(players[0].id);
+      }
+      return;
+    }
+
+    if (!playerSelectionTouched) {
       setSelectedPlayerId(players[0].id);
     }
-  }, [selectedPlayerId, workspace?.players]);
+  }, [playerSelectionTouched, selectedPlayerId, workspace]);
+
+  const choosePlayer = useCallback((playerId: string) => {
+    setPlayerSelectionTouched(true);
+    setSelectedPlayerId(playerId);
+  }, []);
 
   function submitTicket(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -193,6 +208,7 @@ export function Dashboard() {
       const response = await apiPost('/api/players', { name: newPlayerName.trim() });
       if (!response.ok) return setError(response.error);
       setNewPlayerName('');
+      setPlayerSelectionTouched(true);
       setSelectedPlayerId(response.player.id);
       await loadWorkspace({ force: true });
     });
@@ -214,6 +230,7 @@ export function Dashboard() {
     if (!response.ok) return setError(response.error);
     setNotice(`Đã xóa khách ${activePlayer.name} khỏi danh sách.`);
     const nextPlayer = (workspace?.players || []).find(player => player.id !== activePlayer.id);
+    setPlayerSelectionTouched(true);
     setSelectedPlayerId(nextPlayer?.id || '');
     await loadWorkspace({ force: true });
   }
@@ -221,10 +238,11 @@ export function Dashboard() {
   async function reparseIssue(issue: ParseIssue) {
     const correctedText = (issueDrafts[issue.id] || issue.source_text || '').trim();
     if (!correctedText) return setError('Tin sửa không được trống.');
-    setNotice('Đang parse lại và thêm dữ liệu...');
+    setNotice('Đang parse lại và thay dữ liệu...');
     const response = await apiPost(`/api/ticket-messages/${issue.ticket_message_id}/reparse`, {
       correctedText,
       issueId: issue.id,
+      sourceText: issue.source_text || undefined,
       mode: 'append',
     });
     if (!response.ok) return setError(response.error);
@@ -233,7 +251,7 @@ export function Dashboard() {
       delete next[issue.id];
       return next;
     });
-    setNotice(response.issues?.length ? `Đã thêm phần parse được, còn ${response.issues.length} tin cần sửa.` : 'OK, đã thêm dữ liệu sửa và đóng hộp tin cần sửa.');
+    setNotice(response.issues?.length ? `Đã thay phần parse được, còn ${response.issues.length} tin cần sửa.` : 'OK, đã thay dữ liệu sửa và đóng hộp tin cần sửa.');
     await loadWorkspace({ force: true });
   }
 
@@ -359,7 +377,7 @@ export function Dashboard() {
             </div>
             <form className="form-grid" onSubmit={submitTicket}>
               <div className="row">
-                <select className="select compact" value={selectedPlayerId} onChange={event => setSelectedPlayerId(event.target.value)}>
+                <select className="select compact" value={selectedPlayerId} onChange={event => choosePlayer(event.target.value)}>
                   <option value="">Tự nhận khách từ tin</option>
                   {workspace?.players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}
                 </select>
