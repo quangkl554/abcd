@@ -213,7 +213,7 @@ export function Dashboard() {
       if (!response.ok) return setError(response.error);
       const issueCount = response.issues?.length || 0;
       setNotice(issueCount ? `Đã lưu phần đọc được, còn ${issueCount} tin cần sửa.` : 'Đã thêm tin.');
-      if (!issueCount) setTicketText('');
+      setTicketText('');
       await loadWorkspace({ force: true });
     });
   }

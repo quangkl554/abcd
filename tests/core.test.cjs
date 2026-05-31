@@ -450,6 +450,56 @@ test('ignore conversational filler and parse moi con stake phrases', () => {
   assert.deepEqual(thousand.warnings, []);
 });
 
+test('parse central mc shorthand and mt/mtr markers', () => {
+  const date = new Date(2026, 4, 31);
+  const activeDai = core.getActiveDai('trung', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: [
+      'nguoi 1:',
+      '28-68-52- bl mc 25n, 39 49, 15 , bl mc 30n, Mtr 3 dai',
+      '68-28-52Mc..30 n..78/38/92/Mc,,15 n bl.3 dai Mt.',
+      'Mt bl.12.20n.52.952.5n.',
+      'Bl. Mt ba dai. 52. 10n.',
+    ].join('\n'),
+    region: 'trung',
+    date,
+  });
+
+  assert.deepEqual(parsed.warnings, []);
+  assert.deepEqual(parsed.tickets[0].soList, ['28', '68', '52']);
+  assert.equal(parsed.tickets[0].tienDat, 25);
+  assert.deepEqual(parsed.tickets[0].dai, activeDai);
+  assert.equal(parsed.tickets.some(t => t.soList.join(',') === '68,28,52' && t.tienDat === 30), true);
+  assert.equal(parsed.tickets.some(t => t.soList.join(',') === '78,38,92' && t.tienDat === 15), true);
+  assert.equal(parsed.tickets.some(t => t.loai === '3Cang' && t.soList.join(',') === '952' && t.tienDat === 5), true);
+  assert.equal(parsed.tickets.some(t => t.soList.join(',') === '52' && t.tienDat === 10 && t.dai.length === activeDai.length), true);
+});
+
+test('parse pasted central ticket batch without token warnings', () => {
+  const date = new Date(2026, 4, 31);
+  const activeDai = core.getActiveDai('trung', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: [
+      'nguoi 1:',
+      '28-68-52- bl mc 25n, 39 49, 15 , bl mc 30n, Mtr 3 dai',
+      'B. 52.20n.352.652.372.6372..3652.6352.5n.dd.352.392.372.30n',
+      '68-28-52Mc..30 n..78/38/92/Mc,,15 n bl.3 dai Mt.',
+      '615 bl 10n 3 dai Mtr',
+      'Mt bl.12.20n.52.952.5n.',
+      'Bl. Mt ba dai. 52. 10n.859.392.6392.5n. 479. 958. 2n  dd  89.  92..359.392.30n.  59. . 952.  632.. 859. 459. 359. . 592. 792. 12n .',
+      'B.29.92.39.93..10n.i',
+      'Khanh Hoa lo 43 42 48 84 60d. 34 30d. 24 54 10d',
+    ].join('\n'),
+    region: 'trung',
+    date,
+  });
+
+  assert.deepEqual(parsed.warnings, []);
+  assert.equal(parsed.tickets.length, 24);
+  assert.equal(parsed.tickets.some(t => t.soList.join(',') === '78,38,92' && t.tienDat === 15), true);
+  assert.equal(parsed.tickets.some(t => t.soList.join(',') === '43,42,48,84' && t.tienDat === 60 && t.dai[0] === activeDai[0]), true);
+});
+
 test('default ticket type follows number length when type is omitted', () => {
   const parsed = core.parseTelegramEnvelope({
     text: 'nguoi 1:\n23 24 5n\n123 124 5n\n1234 1245 5n\n23b100',

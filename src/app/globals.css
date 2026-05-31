@@ -337,7 +337,7 @@ p {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
   gap: 16px;
   align-items: start;
   width: 100%;
@@ -351,7 +351,7 @@ p {
 }
 
 .results-workspace {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
 }
 
 .summary-workspace {
@@ -371,9 +371,10 @@ p {
   top: 82px;
   min-width: 0;
   max-height: calc(100vh - 98px);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: visible;
   scrollbar-gutter: stable;
-  padding-right: 4px;
+  padding-right: 8px;
   padding-bottom: 12px;
 }
 
@@ -1065,7 +1066,7 @@ tr:hover td {
 
 .rates-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 .rate-grid {
@@ -1076,7 +1077,7 @@ tr:hover td {
 }
 
 .sidebar-flow .section {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .rate-grid.header {

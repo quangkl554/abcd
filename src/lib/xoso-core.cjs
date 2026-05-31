@@ -19,6 +19,7 @@ const REGION_ALIASES = {
   mien_nam: REGION.NAM,
   trung: REGION.TRUNG,
   mt: REGION.TRUNG,
+  mtr: REGION.TRUNG,
   xsmt: REGION.TRUNG,
   mientrung: REGION.TRUNG,
   mien_trung: REGION.TRUNG,
@@ -950,13 +951,14 @@ function preprocessLine(line, region) {
   );
   s = s.replace(/\.(?=\d)/g, ' ').replace(/(?<=\d)\./g, ' ').replace(/\./g, ' ');
   s = s.replace(/[\(\[]/g, ' ( ').replace(/[\)\]]/g, ' ) ');
-  s = s.replace(/[,;\-–—:+]/g, ' ');
+  s = s.replace(/[,;\-–—:+\/]/g, ' ');
   s = s.replace(/keo\s*d[eê]n/g, 'den').replace(/k[eé]o/g, 'den');
   s = s.replace(/\bden\s+(?:luon|nha|nhe|nghen|hen|dum|giup|toi|qua|sang)\b/g, 'den');
   s = s.replace(/(\d)(den)(\d)/g, '$1 den $3');
   s = s.replace(/(\d)(den)/g, '$1 den');
   s = s.replace(/(den)(\d)/g, 'den $2');
   s = s.replace(/(\d+)\s+(?:diem|ngan|nghin)/g, '$1n');
+  s = s.replace(/(\d+(?:\.\d+)?)\s+([nkm])\b/g, '$1$2');
   s = s.replace(/(\d+)(?:ngan|nghin)\b/g, '$1n');
   s = s.replace(/(\d{2,}(?:\.\d+)?)\s+d\b/g, '$1n');
 
@@ -985,6 +987,9 @@ function preprocessLine(line, region) {
     'd phu': 'phu',
     '1 dai': '1dai',
     'mot dai': '1dai',
+    'hai dai': '2dai',
+    'ba dai': '3dai',
+    'bon dai': '4dai',
     '4 dai': '4dai',
     '3 dai': '3dai',
     '2 dai': '2dai',
@@ -993,9 +998,13 @@ function preprocessLine(line, region) {
     '3 đai': '3dai',
     '2 đai': '2dai',
     '1 d': '1d',
+    'hai d': '2d',
+    'ba d': '3d',
+    'bon d': '4d',
     '4 d': '4d',
     '3 d': '3d',
     '2 d': '2d',
+    'mien trung': 'mtr',
   };
   const cfgRegion = getConfig(region).region;
   const regionMap =
@@ -1099,6 +1108,12 @@ function expandCompactTokens(tokens, region) {
     const numberTypeMoney = tok.match(/^(\d{2,4})([a-z]+)(\d+(?:\.\d+)?(?:n|k|d|m|diem|diểm|tr|trieu|triệu))$/);
     if (numberTypeMoney && normalizeTicketType(numberTypeMoney[2], region)) {
       expanded.push(numberTypeMoney[1], numberTypeMoney[2], numberTypeMoney[3]);
+      continue;
+    }
+
+    const numberMoiCon = tok.match(/^(\d{2,4})(mc)$/);
+    if (numberMoiCon) {
+      expanded.push(numberMoiCon[1], numberMoiCon[2]);
       continue;
     }
 
@@ -1437,6 +1452,10 @@ function parseLegacyTickets(rawText, options = {}) {
     'lay',
     'tin',
     'nay',
+    'mc',
+    'mt',
+    'mtr',
+    'i',
     'bo',
     'tru',
   ].includes(tok);
