@@ -46,6 +46,7 @@ type Ticket = {
   ghi_chu: string;
   source_text: string;
   source_line_no?: number | null;
+  created_at?: string;
 };
 
 type ParseIssue = {
@@ -93,7 +94,7 @@ type EditingLine = {
 
 type DashboardDialog =
   | { type: 'delete-player'; playerId: string; playerName: string }
-  | { type: 'delete-message'; messageId: string }
+  | { type: 'delete-ticket-line'; messageId: string; ticketId: string; sourceText: string; sourceLineNumber: number | null; playerId: string | null; playerName: string }
   | { type: 'reset'; scope: 'day-region' | 'all'; label: string };
 
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
@@ -131,23 +132,11 @@ export function Dashboard() {
   const [pending, startTransition] = useTransition();
 
   const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
-  const filteredTickets = useMemo(() => {
-    const tickets = workspace?.tickets || [];
-    if (!selectedPlayerId || !activePlayer) return tickets;
-    return tickets.filter(ticket => ticket.player_id === selectedPlayerId || (!ticket.player_id && ticket.player_name === activePlayer.name));
-  }, [activePlayer, selectedPlayerId, workspace?.tickets]);
   const filteredMessages = useMemo(() => {
     const messages = workspace?.messages || [];
     if (!selectedPlayerId || !activePlayer) return messages;
     return messages.filter(message => message.player_id === selectedPlayerId || (!message.player_id && message.player_name === activePlayer.name));
   }, [activePlayer, selectedPlayerId, workspace?.messages]);
-  const filteredMessageIds = useMemo(() => new Set(filteredMessages.map(message => message.id)), [filteredMessages]);
-  const filteredIssues = useMemo(() => {
-    const issues = workspace?.issues || [];
-    if (!selectedPlayerId) return issues;
-    return issues.filter(issue => filteredMessageIds.has(issue.ticket_message_id));
-  }, [filteredMessageIds, selectedPlayerId, workspace?.issues]);
-  const activeIssues = useMemo(() => groupOpenIssues(filteredIssues), [filteredIssues]);
   const messageOrder = useMemo(() => {
     const map = new Map<string, number>();
     [...filteredMessages]
@@ -155,6 +144,28 @@ export function Dashboard() {
       .forEach((message, index) => map.set(message.id, index + 1));
     return map;
   }, [filteredMessages]);
+  const filteredTickets = useMemo(() => {
+    const tickets = workspace?.tickets || [];
+    if (!selectedPlayerId || !activePlayer) return tickets;
+    return tickets.filter(ticket => ticket.player_id === selectedPlayerId || (!ticket.player_id && ticket.player_name === activePlayer.name));
+  }, [activePlayer, selectedPlayerId, workspace?.tickets]);
+  const sortedTickets = useMemo(() => {
+    return [...filteredTickets].sort((a, b) => {
+      const messageDiff = (messageOrder.get(a.ticket_message_id) || 0) - (messageOrder.get(b.ticket_message_id) || 0);
+      if (messageDiff) return messageDiff;
+      const lineA = ticketSourceLine(a, filteredMessages) ?? Number.MAX_SAFE_INTEGER;
+      const lineB = ticketSourceLine(b, filteredMessages) ?? Number.MAX_SAFE_INTEGER;
+      if (lineA !== lineB) return lineA - lineB;
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+    });
+  }, [filteredMessages, filteredTickets, messageOrder]);
+  const filteredMessageIds = useMemo(() => new Set(filteredMessages.map(message => message.id)), [filteredMessages]);
+  const filteredIssues = useMemo(() => {
+    const issues = workspace?.issues || [];
+    if (!selectedPlayerId) return issues;
+    return issues.filter(issue => filteredMessageIds.has(issue.ticket_message_id));
+  }, [filteredMessageIds, selectedPlayerId, workspace?.issues]);
+  const activeIssues = useMemo(() => groupOpenIssues(filteredIssues), [filteredIssues]);
   const totals = useMemo(() => {
     return {
       tickets: filteredTickets.length,
@@ -222,9 +233,11 @@ export function Dashboard() {
 
   async function saveRates(rateProfile: Player['rate_profile']) {
     if (!activePlayer) return;
-    const response = await apiPatch('/api/players', { id: activePlayer.id, rateProfile });
+    const response = await apiPatch('/api/players', { id: activePlayer.id, rateProfile, recalculate: { date, region } });
     if (!response.ok) return setError(response.error);
-    setNotice('Đã lưu hệ số và tỉ lệ cho khách.');
+    setNotice(response.recalculatedTickets
+      ? `Đã lưu hệ số và cập nhật ${response.recalculatedTickets} vé của khách trong ngày/miền này.`
+      : 'Đã lưu hệ số và tỉ lệ cho khách.');
     await loadWorkspace({ force: true });
   }
 
@@ -266,15 +279,15 @@ export function Dashboard() {
   }, []);
 
   const startEdit = useCallback((ticket: Ticket) => {
-    const sourceLineNumber = ticket.source_line_no ?? null;
+    const sourceLineNumber = ticketSourceLine(ticket, workspace?.messages || []);
     setEditingLine({
-      key: `${ticket.ticket_message_id}|${sourceLineNumber || ''}|${(ticket.source_text || '').replace(/\s+/g, ' ').trim().toLowerCase()}`,
+      key: ticketLineKey(ticket, sourceLineNumber),
       messageId: ticket.ticket_message_id,
       sourceText: ticket.source_text || '',
       sourceLineNumber,
     });
     setEditingText(ticket.source_text || '');
-  }, []);
+  }, [workspace?.messages]);
 
   const saveEditedMessage = useCallback(async () => {
     if (!editingLine || !editingText.trim()) return setError('Tin sửa không được trống.');
@@ -292,8 +305,16 @@ export function Dashboard() {
   }, [editingLine, editingText, loadWorkspace]);
 
   const deleteMessage = useCallback(async (ticket: Ticket) => {
-    setDialog({ type: 'delete-message', messageId: ticket.ticket_message_id });
-  }, []);
+    setDialog({
+      type: 'delete-ticket-line',
+      messageId: ticket.ticket_message_id,
+      ticketId: ticket.id,
+      sourceText: ticket.source_text || '',
+      sourceLineNumber: ticketSourceLine(ticket, workspace?.messages || []),
+      playerId: ticket.player_id,
+      playerName: ticket.player_name,
+    });
+  }, [workspace?.messages]);
 
   async function checkAll() {
     setNotice('Đang dò vé. Nếu chưa có KQ, hệ thống sẽ tự tải nguồn trước...');
@@ -326,10 +347,17 @@ export function Dashboard() {
       return;
     }
 
-    if (dialog.type === 'delete-message') {
-      const response = await apiDelete(`/api/ticket-messages/${dialog.messageId}`);
+    if (dialog.type === 'delete-ticket-line') {
+      const response = await apiDelete(`/api/ticket-messages/${dialog.messageId}`, {
+        ticketId: dialog.ticketId,
+        sourceText: dialog.sourceText || undefined,
+        sourceLineNo: dialog.sourceLineNumber ?? undefined,
+        playerId: dialog.playerId,
+        playerName: dialog.playerName,
+        region,
+      });
       if (!response.ok) return setError(response.error);
-      setNotice('Đã xóa tin và các vé liên quan.');
+      setNotice(`Đã xóa ${response.deletedCount || 0} vé của đúng dòng tin này.`);
       setDialog(null);
       await loadWorkspace({ force: true });
       return;
@@ -428,9 +456,9 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTickets.map((ticket, index) => {
-                    const sourceLineNumber = ticket.source_line_no ?? null;
-                    const lineKey = `${ticket.ticket_message_id}|${sourceLineNumber || ''}|${(ticket.source_text || '').replace(/\s+/g, ' ').trim().toLowerCase()}`;
+                  {sortedTickets.map((ticket, index) => {
+                    const sourceLineNumber = ticketSourceLine(ticket, filteredMessages);
+                    const lineKey = ticketLineKey(ticket, sourceLineNumber);
                     return (
                       <TableRows
                         key={ticket.id}
@@ -543,11 +571,11 @@ function dashboardDialogContent(dialog: DashboardDialog | null) {
       tone: 'danger' as const,
     };
   }
-  if (dialog.type === 'delete-message') {
+  if (dialog.type === 'delete-ticket-line') {
     return {
-      title: 'Xóa tin gốc',
-      description: 'Toàn bộ vé được sinh ra từ tin này sẽ bị xóa. Thao tác này không hoàn tác.',
-      confirmLabel: 'Xóa tin',
+      title: 'Xóa dòng tin',
+      description: `Chỉ xóa vé của ${dialog.playerName || 'khách này'} trong dòng ${dialog.sourceLineNumber || '?'} của miền đang xem. Các dòng khác trong cùng tin gốc được giữ nguyên.`,
+      confirmLabel: 'Xóa dòng',
       tone: 'danger' as const,
     };
   }
@@ -683,7 +711,7 @@ function RatesEditor({ player, config, onSave, onDelete }: { player: Player; con
         </div>
       ))}
       <div className="row rates-actions">
-        <button className="btn primary" type="button" onClick={save}><Save size={17} /> Lưu hệ số</button>
+        <button className="btn primary" type="button" onClick={save}><Save size={17} /> Lưu & cập nhật vé</button>
         <button className="btn danger-soft" type="button" onClick={onDelete}><Trash2 size={17} /> Xóa khách</button>
       </div>
     </div>

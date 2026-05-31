@@ -42,6 +42,10 @@ export const playerCreateSchema = z.object({
 export const playerPatchSchema = playerCreateSchema.partial().extend({
   id: z.string().uuid(),
   active: z.boolean().optional(),
+  recalculate: z.object({
+    date: dateSchema,
+    region: regionSchema,
+  }).optional(),
 });
 
 export const adminUserCreateSchema = z.object({

@@ -713,6 +713,43 @@ test('parse whole-line and parenthesized station scope', () => {
   }
 });
 
+test('exclude station marker scopes tickets to remaining active stations', () => {
+  const date = new Date(2026, 4, 16);
+  const activeDai = core.getActiveDai('nam', date);
+  assert.deepEqual(activeDai, ['TP.HCM', 'Long An', 'Bình Phước', 'Hậu Giang']);
+
+  const heading = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nbỏ bp\nb 12 10n',
+    region: 'nam',
+    date,
+  });
+  assert.deepEqual(heading.tickets[0].dai, ['TP.HCM', 'Long An', 'Hậu Giang']);
+  assert.deepEqual(heading.warnings, []);
+
+  const inline = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nbao 3 dai bo bp 60b70n',
+    region: 'nam',
+    date,
+  });
+  assert.deepEqual(inline.tickets[0].dai, ['TP.HCM', 'Long An', 'Hậu Giang']);
+  assert.deepEqual(inline.tickets[0].soList, ['60']);
+  assert.equal(inline.tickets[0].tienDat, 70);
+  assert.deepEqual(inline.warnings, []);
+});
+
+test('parse glued number/type/stake tokens inside parentheses', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nb 12 10n (34b20n) 60b70n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+
+  assert.deepEqual(parsed.tickets.map(t => t.soList), [['12'], ['34'], ['60']]);
+  assert.deepEqual(parsed.tickets.map(t => t.tienDat), [10, 20, 70]);
+  assert.deepEqual(parsed.tickets.map(t => t.dai), [['TP.HCM'], ['TP.HCM'], ['TP.HCM']]);
+  assert.deepEqual(parsed.warnings, []);
+});
+
 test('parse keo ranges with filler words', () => {
   const parsed = core.parseTelegramEnvelope({
     text: 'nguoi 1:\n123 keo luon nha 923 b 5n\n101 den 109 dd 10n\n02 keo 92 b 1n',

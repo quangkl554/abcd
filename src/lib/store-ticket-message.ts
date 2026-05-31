@@ -229,6 +229,53 @@ export async function reparseTicketMessage(args: {
   return { parsed, message: updated, tickets, issues };
 }
 
+export async function deleteTicketMessageScope(args: {
+  supabase: SupabaseLike;
+  ownerId: string;
+  messageId: string;
+  ticketId?: string;
+  sourceText?: string;
+  sourceLineNo?: number | null;
+  playerId?: string | null;
+  playerName?: string | null;
+  region?: string | null;
+}) {
+  const sourceText = args.sourceText?.trim() || '';
+  const sourceLineNo = typeof args.sourceLineNo === 'number' ? args.sourceLineNo : null;
+
+  let deletedTickets = await deleteTicketsByScope(args.supabase, {
+    ownerId: args.ownerId,
+    messageId: args.messageId,
+    ticketId: args.ticketId,
+    sourceText,
+    sourceLineNo,
+    playerId: args.playerId,
+    playerName: args.playerName,
+    region: args.region,
+    preferSourceLine: sourceLineNo != null,
+  });
+
+  if (!deletedTickets.length && sourceText && sourceLineNo != null) {
+    deletedTickets = await deleteTicketsByScope(args.supabase, {
+      ownerId: args.ownerId,
+      messageId: args.messageId,
+      ticketId: args.ticketId,
+      sourceText,
+      sourceLineNo: null,
+      playerId: args.playerId,
+      playerName: args.playerName,
+      region: args.region,
+      preferSourceLine: false,
+    });
+  }
+
+  if (sourceLineNo != null || sourceText) {
+    await ignoreIssuesByScope(args.supabase, args.ownerId, args.messageId, sourceLineNo, sourceText);
+  }
+
+  return { deletedTickets, deletedCount: deletedTickets.length };
+}
+
 function appendCorrectionText(rawText: string, correctedText: string) {
   const trimmedRaw = rawText.trim();
   const trimmedCorrection = correctedText.trim();
@@ -261,6 +308,67 @@ async function deleteTicketsBySourceText(supabase: SupabaseLike, ownerId: string
     .eq('owner_id', ownerId)
     .eq('ticket_message_id', messageId)
     .in('source_text', values);
+  if (error) throw error;
+}
+
+async function deleteTicketsByScope(
+  supabase: SupabaseLike,
+  scope: {
+    ownerId: string;
+    messageId: string;
+    ticketId?: string;
+    sourceText?: string;
+    sourceLineNo?: number | null;
+    playerId?: string | null;
+    playerName?: string | null;
+    region?: string | null;
+    preferSourceLine?: boolean;
+  },
+) {
+  let query = supabase
+    .from('tickets')
+    .delete()
+    .eq('owner_id', scope.ownerId)
+    .eq('ticket_message_id', scope.messageId);
+
+  if (scope.region) query = query.eq('region', scope.region);
+  if (scope.playerId) query = query.eq('player_id', scope.playerId);
+  else if (scope.playerName) query = query.eq('player_name', scope.playerName);
+
+  if (scope.preferSourceLine && scope.sourceLineNo != null) {
+    query = query.eq('source_line_no', scope.sourceLineNo);
+  } else if (scope.sourceText) {
+    query = query.eq('source_text', scope.sourceText);
+  } else if (scope.ticketId) {
+    query = query.eq('id', scope.ticketId);
+  } else {
+    return [];
+  }
+
+  const { data, error } = await query.select('id,source_text,source_line_no');
+  if (error) throw error;
+  return data || [];
+}
+
+async function ignoreIssuesByScope(
+  supabase: SupabaseLike,
+  ownerId: string,
+  messageId: string,
+  sourceLineNo: number | null,
+  sourceText: string,
+) {
+  let query = supabase
+    .from('parse_issues')
+    .update({ status: 'ignored', resolved_at: new Date().toISOString() })
+    .eq('owner_id', ownerId)
+    .eq('ticket_message_id', messageId)
+    .eq('status', 'open');
+
+  if (sourceLineNo != null) query = query.eq('line_no', sourceLineNo);
+  else if (sourceText) query = query.eq('source_text', sourceText);
+  else return;
+
+  const { error } = await query;
   if (error) throw error;
 }
 

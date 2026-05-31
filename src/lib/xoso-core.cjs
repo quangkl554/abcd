@@ -1350,6 +1350,18 @@ function parseLegacyTickets(rawText, options = {}) {
     const phu = activeDai.filter(dai => !mainSet.has(dai));
     return phu.length ? phu : [...activeDai];
   };
+  const isExcludeDaiToken = tok => tok === 'bo' || tok === 'tru';
+  const sameDaiList = (left, right) => {
+    const a = normalizeDaiList(left, region, activeDai);
+    const b = normalizeDaiList(right, region, activeDai);
+    return a.length === b.length && a.every((dai, index) => dai === b[index]);
+  };
+  const excludeDais = (baseDais, excludedDais) => {
+    const base = normalizeDaiList(baseDais && baseDais.length ? baseDais : activeDai, region, activeDai);
+    const excluded = new Set(normalizeDaiList(excludedDais, region, activeDai));
+    const remaining = base.filter(dai => !excluded.has(dai));
+    return remaining.length ? remaining : base;
+  };
   const isDaiMarkerToken = tok => isPhuMarkerToken(tok) || /^[1234]dai$/.test(tok) || tok === 'dai' || /^[1234]d$/.test(tok);
   const daiListFromMarker = tok => {
     const lDai = detectDai(tok, region);
@@ -1372,6 +1384,23 @@ function parseLegacyTickets(rawText, options = {}) {
     const direct = detectDai(tok, region);
     if (direct) return direct;
     return null;
+  };
+  const readExcludedDaiRun = (tokens, startIndex, baseDais) => {
+    if (!isExcludeDaiToken(tokens[startIndex])) return { dais: null, nextIndex: startIndex };
+    const excludedDais = [];
+    let nextIndex = startIndex + 1;
+    if (tokens[nextIndex] === 'dai') nextIndex++;
+    while (nextIndex < tokens.length) {
+      const dai = detectDaiInTokens(tokens, nextIndex);
+      if (!dai) break;
+      if (!excludedDais.includes(dai)) excludedDais.push(dai);
+      nextIndex++;
+    }
+    if (!excludedDais.length) return { dais: null, nextIndex: startIndex + 1 };
+    return {
+      dais: excludeDais(baseDais, excludedDais),
+      nextIndex,
+    };
   };
 
   const getStakeTien = tok => (isDaiMarkerToken(tok) ? 0 : getTien(tok));
@@ -1408,6 +1437,8 @@ function parseLegacyTickets(rawText, options = {}) {
     'lay',
     'tin',
     'nay',
+    'bo',
+    'tru',
   ].includes(tok);
 
   for (let ln = 0; ln < lines.length; ln++) {
@@ -1432,9 +1463,18 @@ function parseLegacyTickets(rawText, options = {}) {
     if (!hasStake && !hasBetNumber) {
       let headingLoai = null;
       let headingDais = [];
-      for (const tok of tokens) {
+      for (let h = 0; h < tokens.length; h++) {
+        const tok = tokens[h];
         const t = normalizeTicketType(tok, region);
         if (t) headingLoai = t === 'Xien' || t.startsWith('Xien') ? t : t;
+        if (isExcludeDaiToken(tok)) {
+          const excluded = readExcludedDaiRun(tokens, h, headingDais.length ? headingDais : activeDai);
+          if (excluded.dais) {
+            headingDais = excluded.dais;
+            h = excluded.nextIndex - 1;
+            continue;
+          }
+        }
         const ds = daiListFromMarker(tok);
         if (ds) headingDais = ds;
       }
@@ -1452,7 +1492,11 @@ function parseLegacyTickets(rawText, options = {}) {
     }
 
     const usingCarry = carryPending;
-    const hasExplicitDaiScope = tokens.some((tok, idx) => !!detectDaiInTokens(tokens, idx) || !!daiListFromMarker(tok));
+    const hasExplicitDaiScope = tokens.some((tok, idx) => (
+      !!detectDaiInTokens(tokens, idx) ||
+      !!daiListFromMarker(tok) ||
+      !!(isExcludeDaiToken(tok) && readExcludedDaiRun(tokens, idx, activeDai).dais)
+    ));
     if (
       openHeadingContext &&
       openHeadingContext.consumed &&
@@ -1599,6 +1643,7 @@ function parseLegacyTickets(rawText, options = {}) {
       for (let j = startIndex; j < tokens.length; j++) {
         const future = tokens[j];
         if (future === '(' || future === ')' || isFillerToken(future)) continue;
+        if (isExcludeDaiToken(future)) continue;
         if (daiListFromMarker(future)) continue;
         return true;
       }
@@ -1638,6 +1683,18 @@ function parseLegacyTickets(rawText, options = {}) {
         while (nextIndex < tokens.length && isFillerToken(tokens[nextIndex])) nextIndex++;
         if (nextIndex < tokens.length && expandRangeIntoBuffer(numBuf, tokens[nextIndex])) {
           i = nextIndex + 1;
+          continue;
+        }
+        i++;
+        continue;
+      }
+
+      if (isExcludeDaiToken(tok)) {
+        const baseDais = sameDaiList(currentDaiList, globalDaiList) ? activeDai : currentDaiList;
+        const excluded = readExcludedDaiRun(tokens, i, baseDais);
+        if (excluded.dais) {
+          applyOrSetDais(excluded.dais, excluded.nextIndex);
+          i = excluded.nextIndex;
           continue;
         }
         i++;
