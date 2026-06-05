@@ -80,6 +80,27 @@ test('rate profile can override coefficients by region', () => {
   assert.equal(core.mergeRates('bac', profile).heSoXac['3Cang'], 720);
 });
 
+test('regional default xac coefficients stay isolated', () => {
+  const bac = core.defaultRates('bac');
+  const nam = core.defaultRates('nam');
+  const trung = core.defaultRates('trung');
+
+  assert.equal(bac.heSoXac.Lo, 800);
+  assert.equal(bac.heSoXac.DauDuoi, 800);
+  assert.equal(bac.heSoXac.Dau, 800);
+  assert.equal(bac.heSoXac.Duoi, 800);
+  assert.equal(bac.heSoXac['3Cang'], 700);
+  assert.equal(bac.heSoXac['4Cang'], 700);
+  assert.equal(bac.tyLe.Lo, 80000);
+  assert.equal(bac.tyLe.DauDuoi, 80000);
+  assert.equal(bac.tyLe['3Cang'], 600000);
+
+  assert.equal(nam.heSoXac.Lo, 700);
+  assert.equal(nam.heSoXac.DauDuoi, 700);
+  assert.equal(trung.heSoXac.Lo, 700);
+  assert.equal(trung.heSoXac.DauDuoi, 700);
+});
+
 test('parse one Telegram message split by nam trung bac headings', () => {
   const rates = {
     byRegion: {
@@ -300,7 +321,7 @@ test('trailing station aliases apply to already parsed tickets in the line', () 
 
 test('plus-separated station aliases and trailing bli are treated as stations', () => {
   const plus = core.parseTelegramEnvelope({
-    text: 'nguoi 1:\nBlo -BT+ BL .72.100n..',
+    text: 'nguoi 1:\nBlo -BT+ bli .72.100n..',
     region: 'nam',
     date: new Date(2026, 4, 12),
   });
@@ -321,6 +342,23 @@ test('plus-separated station aliases and trailing bli are treated as stations', 
   });
   assert.deepEqual(leading.tickets.map(t => t.dai), [['Bạc Liêu'], ['Bạc Liêu']]);
   assert.deepEqual(leading.tickets.map(t => t.loai), ['Lo', 'DauDuoi']);
+});
+
+test('bl after station remains bao lo instead of Bac Lieu alias', () => {
+  const date = new Date(2026, 5, 5);
+  const activeDai = core.getActiveDai('nam', date);
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nbd bl 12 100n',
+    region: 'nam',
+    date,
+  });
+
+  assert.deepEqual(parsed.warnings, []);
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.tickets[0].loai, 'Lo');
+  assert.deepEqual(parsed.tickets[0].dai, [activeDai[1]]);
+  assert.deepEqual(parsed.tickets[0].soList, ['12']);
+  assert.equal(parsed.tickets[0].tienDat, 100);
 });
 
 test('trailing str alias moves parsed tickets to Soc Trang without default duplicate', () => {
@@ -741,6 +779,16 @@ test('parse whole-line and parenthesized station scope', () => {
   assert.deepEqual(scoped.tickets[0].dai, ['TP.HCM', 'Đồng Tháp', 'Cà Mau']);
   assert.deepEqual(scoped.tickets[1].dai, ['TP.HCM']);
 
+  const exactScoped = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\nBl 21 61 100n (bl 3dai 21 61 100n)',
+    region: 'nam',
+    date: new Date(2026, 4, 11),
+  });
+  const exactActiveDai = core.getActiveDai('nam', new Date(2026, 4, 11));
+  assert.deepEqual(exactScoped.warnings, []);
+  assert.deepEqual(exactScoped.tickets.map(t => t.dai), [[exactActiveDai[0]], exactActiveDai]);
+  assert.deepEqual(exactScoped.tickets.map(t => t.soList), [['21', '61'], ['21', '61']]);
+
   const inline = core.parseTelegramEnvelope({
     text: 'nguoi 1:\n70dau1trieu.200...22.67b100..(22.67b100.3dai)',
     region: 'nam',
@@ -887,6 +935,27 @@ test('bare xc stake before dd and ending 3d marker are not treated as numbers', 
   assert.deepEqual(parsed.tickets[3].soList, ['15']);
   assert.deepEqual(parsed.tickets[4].soList, ['47']);
   assert.equal(parsed.tickets.some(t => t.loai === 'Duoi' && t.tienDat === 3), false);
+});
+
+test('three digit number before new type is not reused as previous xc stake', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n03 43 83b 20ndd 130n  983 683 903 603 943 643 xc 60n  843 b 10n xc 150n 8843 2843b 25n bd',
+    region: 'nam',
+    date: new Date(2026, 5, 5),
+  });
+  const activeDai = core.getActiveDai('nam', new Date(2026, 5, 5));
+
+  assert.deepEqual(parsed.warnings, []);
+  assert.equal(parsed.tickets.length, 6);
+  assert.equal(parsed.tickets.some(t => t.tienDat === 843), false);
+  assert.deepEqual(parsed.tickets.map(t => t.dai), parsed.tickets.map(() => [activeDai[1]]));
+  assert.deepEqual(parsed.tickets.map(t => t.loai), ['Lo', 'DauDuoi', 'XiuChu', '3Cang', 'XiuChu', '4Cang']);
+  assert.deepEqual(parsed.tickets[2].soList, ['983', '683', '903', '603', '943', '643']);
+  assert.deepEqual(parsed.tickets[3].soList, ['843']);
+  assert.equal(parsed.tickets[3].tienDat, 10);
+  assert.deepEqual(parsed.tickets[4].soList, ['843']);
+  assert.equal(parsed.tickets[4].tienDat, 150);
+  assert.deepEqual(parsed.tickets[5].soList, ['8843', '2843']);
 });
 
 test('ending 3d marker applies to emitted line tickets without becoming dd stake', () => {
@@ -1060,6 +1129,23 @@ test('check multi-station tickets only against their own station results', () =>
   assert.equal(vt.hits.every(hit => hit.dai === 'Vũng Tàu'), true);
   assert.equal(bt.ketQua, 'TRÚNG');
   assert.equal(bt.hits.every(hit => hit.dai === 'Bến Tre'), true);
+});
+
+test('parse northern xc shorthand for three digit dau-duoi', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'nguoi 1:\n123 xc 20n',
+    region: 'bac',
+    activeDai: ['Miá»n Báº¯c'],
+  });
+
+  assert.deepEqual(parsed.warnings, []);
+  assert.equal(parsed.tickets.length, 1);
+  assert.equal(parsed.tickets[0].loai, 'DauDuoi3C');
+  assert.deepEqual(parsed.tickets[0].soList, ['123']);
+  assert.equal(parsed.tickets[0].tienDat, 20);
+  assert.equal(parsed.tickets[0].heSoXac, 700);
+  assert.equal(parsed.tickets[0].tyLeTrung, 550000);
+  assert.equal(parsed.tickets[0].xac, 20 * 1 * 4 * 700);
 });
 
 test('parse and check northern xien ticket', () => {

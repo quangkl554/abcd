@@ -906,6 +906,19 @@ function normalizeTicketType(typeRaw, region = REGION.NAM) {
     boncang: '4Cang',
   };
   if (getConfig(region).region === REGION.BAC) {
+    Object.assign(base, {
+      xc: 'DauDuoi3C',
+      xiuchu: 'DauDuoi3C',
+      xiu: 'DauDuoi3C',
+      xchu: 'DauDuoi3C',
+      xdau: 'Dau3C',
+      xiudau: 'Dau3C',
+      xdui: 'Duoi3C',
+      xdu: 'Duoi3C',
+      xcui: 'Duoi3C',
+      xduoi: 'Duoi3C',
+      xiuduoi: 'Duoi3C',
+    });
     if (/^(xien|x|da|dx)[234]?$/.test(t)) {
       const level = t.match(/[234]/);
       return level ? `Xien${level[0]}` : 'Xien';
@@ -1391,11 +1404,6 @@ function parseLegacyTickets(rawText, options = {}) {
   };
   const detectDaiInTokens = (tokens, index) => {
     const tok = tokens[index];
-    if (getConfig(region).region === REGION.NAM && tok === 'bl') {
-      const prevDai = index > 0 ? detectDai(tokens[index - 1], region) : null;
-      if (prevDai) return detectDai('bli', region);
-      return null;
-    }
     const direct = detectDai(tok, region);
     if (direct) return direct;
     return null;
@@ -1744,6 +1752,8 @@ function parseLegacyTickets(rawText, options = {}) {
       if (typeCheck) {
         if (
           numBuf.length === 1 &&
+          String(numBuf[0]).length <= 2 &&
+          !(i + 1 < tokens.length && getStakeTien(tokens[i + 1]) > 0) &&
           lastNumBuf.length > 0 &&
           currentLoai &&
           currentLoai !== typeCheck &&
