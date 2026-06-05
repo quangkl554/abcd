@@ -23,11 +23,21 @@ import { WorkDatePicker } from './work-date-picker';
 
 type Region = 'nam' | 'trung' | 'bac';
 
+type RateBucket = {
+  heSoXac?: Record<string, number>;
+  tyLe?: Record<string, number>;
+};
+
+type RateProfile = RateBucket & {
+  byRegion?: Partial<Record<Region, RateBucket>>;
+  ratesByRegion?: Partial<Record<Region, RateBucket>>;
+};
+
 type Player = {
   id: string;
   name: string;
   active: boolean;
-  rate_profile: { heSoXac?: Record<string, number>; tyLe?: Record<string, number> };
+  rate_profile: RateProfile;
 };
 
 type Ticket = {
@@ -683,15 +693,16 @@ function RatesEditor({ player, config, onSave, onDelete }: { player: Player; con
   const [tyLe, setTyLe] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    setHeSoXac(toDisplayRates({ ...config.heSoXacDefault, ...(player.rate_profile?.heSoXac || {}) }));
-    setTyLe(toDisplayRates({ ...config.tyLeDefault, ...(player.rate_profile?.tyLe || {}) }));
+    const scopedRates = rateBucketForRegion(player.rate_profile, config.region);
+    setHeSoXac(toDisplayRates({ ...config.heSoXacDefault, ...(scopedRates.heSoXac || {}) }));
+    setTyLe(toDisplayRates({ ...config.tyLeDefault, ...(scopedRates.tyLe || {}) }));
   }, [player.id, config, player.rate_profile]);
 
   function save() {
-    onSave({
+    onSave(rateProfileWithRegionBucket(player.rate_profile, config.region, {
       heSoXac: fromDisplayRates(heSoXac),
       tyLe: fromDisplayRates(tyLe),
-    });
+    }));
   }
 
   return (
@@ -716,6 +727,35 @@ function RatesEditor({ player, config, onSave, onDelete }: { player: Player; con
       </div>
     </div>
   );
+}
+
+function sharedRateRegions(region: Region): Region[] {
+  return region === 'bac' ? ['bac'] : ['nam', 'trung'];
+}
+
+function rateBucketForRegion(profile: RateProfile | null | undefined, region: Region): RateBucket {
+  const byRegion = profile?.byRegion || profile?.ratesByRegion || {};
+  if (region === 'bac') return byRegion.bac || {};
+  return byRegion[region] || byRegion.nam || byRegion.trung || {
+    heSoXac: profile?.heSoXac || {},
+    tyLe: profile?.tyLe || {},
+  };
+}
+
+function rateProfileWithRegionBucket(profile: RateProfile | null | undefined, region: Region, bucket: RateBucket): RateProfile {
+  const currentByRegion = profile?.byRegion || profile?.ratesByRegion || {};
+  const byRegion: Partial<Record<Region, RateBucket>> = { ...currentByRegion };
+  for (const key of sharedRateRegions(region)) {
+    byRegion[key] = {
+      heSoXac: { ...(bucket.heSoXac || {}) },
+      tyLe: { ...(bucket.tyLe || {}) },
+    };
+  }
+  const rest = { ...(profile || {}) };
+  delete rest.heSoXac;
+  delete rest.tyLe;
+  delete rest.ratesByRegion;
+  return { ...rest, byRegion };
 }
 
 function StatusBadge({ status, winAmount = 0 }: { status: string; winAmount?: number }) {

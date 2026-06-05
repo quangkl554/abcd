@@ -99,6 +99,14 @@ test('regional default xac coefficients stay isolated', () => {
   assert.equal(nam.heSoXac.DauDuoi, 700);
   assert.equal(trung.heSoXac.Lo, 700);
   assert.equal(trung.heSoXac.DauDuoi, 700);
+
+  const legacyShared = { heSoXac: { Lo: 720, DauDuoi: 720 }, tyLe: { Lo: 72000 } };
+  assert.equal(core.mergeRates('nam', legacyShared).heSoXac.Lo, 720);
+  assert.equal(core.mergeRates('trung', legacyShared).heSoXac.Lo, 720);
+  assert.equal(core.mergeRates('bac', legacyShared).heSoXac.Lo, 800);
+
+  const bacScoped = { byRegion: { bac: { heSoXac: { Lo: 820 }, tyLe: { Lo: 82000 } } } };
+  assert.equal(core.mergeRates('bac', bacScoped).heSoXac.Lo, 820);
 });
 
 test('parse one Telegram message split by nam trung bac headings', () => {

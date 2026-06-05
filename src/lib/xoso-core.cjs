@@ -733,14 +733,36 @@ function defaultRates(region) {
   };
 }
 
+function sharedRateRegionKeys(region) {
+  return canonicalRegion(region) === REGION.BAC ? [REGION.BAC] : [REGION.NAM, REGION.TRUNG];
+}
+
+function cloneRateBucket(bucket) {
+  return {
+    heSoXac: clone(bucket && bucket.heSoXac ? bucket.heSoXac : {}),
+    tyLe: clone(bucket && (bucket.tyLe || bucket.tiLe) ? (bucket.tyLe || bucket.tiLe) : {}),
+  };
+}
+
+function withScopedRateProfile(rates, region) {
+  const byRegion = {};
+  for (const key of sharedRateRegionKeys(region)) {
+    byRegion[key] = cloneRateBucket(rates);
+  }
+  return { ...rates, byRegion };
+}
+
 function rateProfilePartsForRegion(profile, region) {
   if (!profile) return [];
   const key = canonicalRegion(region);
   const root = profile.rates && typeof profile.rates === 'object' ? profile.rates : profile;
-  const parts = [root];
   const byRegion = profile.byRegion || profile.ratesByRegion || root.byRegion || root.ratesByRegion;
-  if (byRegion && byRegion[key]) parts.push(byRegion[key]);
-  return parts;
+  if (byRegion) {
+    const sharedKey = key === REGION.TRUNG ? REGION.NAM : key === REGION.NAM ? REGION.TRUNG : null;
+    const regionPart = byRegion[key] || (sharedKey ? byRegion[sharedKey] : null);
+    return regionPart ? [regionPart] : [];
+  }
+  return key === REGION.BAC ? [] : [root];
 }
 
 function mergeRates(region, ...profiles) {
@@ -756,7 +778,7 @@ function mergeRates(region, ...profiles) {
       }
     }
   }
-  return out;
+  return withScopedRateProfile(out, region);
 }
 
 function normalizeHeSoShortcut(value) {
@@ -808,7 +830,7 @@ function parseRateProfile(rateText, region = REGION.NAM) {
   const simple = text.match(/^\s*(\d+(?:\.\d+)?)\s*[,/]\s*(\d+(?:\.\d+)?)\s*$/);
   if (simple) {
     applyGroupRate(rates, region, '2c', simple[1], simple[2]);
-    return rates;
+    return withScopedRateProfile(rates, region);
   }
 
   const pairRe = /([a-z0-9]+)\s*=\s*(\d+(?:\.\d+)?)\s*[,/]\s*(\d+(?:\.\d+)?)/g;
@@ -816,7 +838,7 @@ function parseRateProfile(rateText, region = REGION.NAM) {
   while ((m = pairRe.exec(text)) !== null) {
     applyGroupRate(rates, region, m[1], m[2], m[3]);
   }
-  return rates;
+  return withScopedRateProfile(rates, region);
 }
 
 function splitInlineRateGroupName(name, rateText, region = REGION.NAM) {
