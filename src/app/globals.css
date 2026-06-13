@@ -1133,7 +1133,7 @@ tr:hover td {
 .summary-type-filter {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+  grid-template-columns: minmax(190px, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding-top: 12px;
@@ -1162,45 +1162,128 @@ tr:hover td {
   font-weight: 700;
 }
 
-.summary-type-filter-options {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-  flex-wrap: wrap;
+.summary-filter-dropdown {
+  position: relative;
+  justify-self: end;
 }
 
-.type-filter-chip {
-  --chip-color: var(--blue);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--chip-color) 24%, var(--line));
+.summary-filter-trigger {
+  min-width: 190px;
+  max-width: min(300px, 70vw);
+  justify-content: flex-start;
+}
+
+.summary-filter-trigger > span:not(.summary-filter-count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-filter-count {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 16%, var(--panel));
+  color: var(--blue-strong);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.summary-filter-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  transition: transform 140ms ease;
+}
+
+.summary-type-filter.open .summary-filter-chevron {
+  transform: rotate(180deg);
+}
+
+.summary-filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: transparent;
+  cursor: default;
+}
+
+.summary-filter-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 3px;
+  width: 250px;
+  max-width: calc(100vw - 32px);
+  padding: 7px;
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
+  box-shadow: 0 16px 40px rgba(20, 32, 46, 0.18);
+}
+
+.summary-filter-all,
+.summary-filter-option {
+  display: grid;
+  grid-template-columns: 20px 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
   font-weight: 800;
+  text-align: left;
   cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
-.type-filter-chip:hover {
-  transform: translateY(-1px);
-  border-color: var(--chip-color);
+.summary-filter-all {
+  grid-template-columns: 20px minmax(0, 1fr);
+  width: 100%;
+  background: transparent;
 }
 
-.type-filter-chip.active {
-  border-color: color-mix(in srgb, var(--chip-color) 58%, var(--line));
-  background: color-mix(in srgb, var(--chip-color) 14%, var(--panel));
-  color: color-mix(in srgb, var(--chip-color) 82%, var(--text));
+.summary-filter-all:hover,
+.summary-filter-all.active,
+.summary-filter-option:hover {
+  background: var(--panel-soft);
+}
+
+.summary-filter-check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--blue);
+}
+
+.summary-filter-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--blue);
+}
+
+.summary-filter-separator {
+  height: 1px;
+  margin: 2px 5px;
+  background: var(--line);
+}
+
+.summary-filter-done {
+  width: 100%;
+  margin-top: 4px;
 }
 
 .type-filter-swatch {
+  --chip-color: var(--blue);
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
@@ -1208,31 +1291,27 @@ tr:hover td {
   background: var(--chip-color);
 }
 
-.type-filter-chip.tone-neutral {
-  --chip-color: var(--muted);
-}
-
-.type-filter-chip.tone-blue {
+.summary-filter-option.tone-blue {
   --chip-color: var(--blue);
 }
 
-.type-filter-chip.tone-amber {
+.summary-filter-option.tone-amber {
   --chip-color: var(--amber);
 }
 
-.type-filter-chip.tone-mint {
+.summary-filter-option.tone-mint {
   --chip-color: var(--green);
 }
 
-.type-filter-chip.tone-rose {
+.summary-filter-option.tone-rose {
   --chip-color: var(--rose);
 }
 
-.type-filter-chip.tone-lavender {
+.summary-filter-option.tone-lavender {
   --chip-color: var(--purple);
 }
 
-.type-filter-chip.tone-teal {
+.summary-filter-option.tone-teal {
   --chip-color: var(--teal);
 }
 
@@ -1866,8 +1945,14 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 
-  .summary-type-filter-options {
-    justify-content: flex-start;
+  .summary-filter-dropdown {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .summary-filter-trigger {
+    width: 100%;
+    max-width: none;
   }
 }
 

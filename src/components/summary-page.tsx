@@ -6,6 +6,7 @@ import {
   Activity,
   BarChart3,
   Check,
+  ChevronDown,
   CircleDollarSign,
   FileText,
   Filter,
@@ -279,38 +280,60 @@ export function SummaryPage() {
 }
 
 function TicketTypeFilter({ selected, onChange }: { selected: TicketTypeGroupId[]; onChange: (next: TicketTypeGroupId[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const selectedGroups = TICKET_TYPE_GROUPS.filter(group => selected.includes(group.id));
+  const triggerLabel = selectedGroups.length === 0
+    ? 'Tất cả loại vé'
+    : selectedGroups.length === 1
+      ? selectedGroups[0].label
+      : `${selectedGroups.length} nhóm loại vé`;
+
   function toggle(groupId: TicketTypeGroupId) {
     onChange(selected.includes(groupId) ? selected.filter(id => id !== groupId) : [...selected, groupId]);
   }
 
   return (
-    <div className="summary-type-filter">
+    <div className={`summary-type-filter ${open ? 'open' : ''}`}>
       <div className="summary-type-filter-title">
         <Filter size={17} />
         <div>
-          <b>Lọc loại vé tổng hợp</b>
-          <span>{selected.length ? `Đang chọn ${selected.length} nhóm` : 'Tất cả loại vé'}</span>
+          <b>Lọc loại vé</b>
+          <span>Áp dụng cho toàn bộ số liệu tổng hợp</span>
         </div>
       </div>
-      <div className="summary-type-filter-options" role="group" aria-label="Lọc loại vé tổng hợp">
-        <button className={`type-filter-chip tone-neutral ${selected.length ? '' : 'active'}`} type="button" aria-pressed={!selected.length} onClick={() => onChange([])}>
-          {!selected.length ? <Check size={14} /> : null} Tất cả
+      <div className="summary-filter-dropdown">
+        <button
+          className="btn soft summary-filter-trigger"
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen(current => !current)}
+        >
+          <Filter size={15} />
+          <span>{triggerLabel}</span>
+          {selected.length ? <span className="summary-filter-count">{selected.length}</span> : null}
+          <ChevronDown className="summary-filter-chevron" size={15} />
         </button>
-        {TICKET_TYPE_GROUPS.map(group => {
-          const active = selected.includes(group.id);
-          return (
-            <button
-              className={`type-filter-chip tone-${group.tone} ${active ? 'active' : ''}`}
-              type="button"
-              aria-pressed={active}
-              onClick={() => toggle(group.id)}
-              key={group.id}
-            >
-              {active ? <Check size={14} /> : <span className="type-filter-swatch" aria-hidden="true" />}
-              {group.label}
-            </button>
-          );
-        })}
+        {open ? (
+          <>
+            <button className="summary-filter-backdrop" type="button" aria-label="Đóng bộ lọc loại vé" onClick={() => setOpen(false)} />
+            <div className="summary-filter-menu" role="menu">
+              <button className={`summary-filter-all ${selected.length ? '' : 'active'}`} type="button" onClick={() => onChange([])}>
+                <span className="summary-filter-check">{selected.length ? null : <Check size={14} />}</span>
+                <span>Tất cả loại vé</span>
+              </button>
+              <div className="summary-filter-separator" />
+              {TICKET_TYPE_GROUPS.map(group => (
+                <label className={`summary-filter-option tone-${group.tone}`} key={group.id}>
+                  <input type="checkbox" checked={selected.includes(group.id)} onChange={() => toggle(group.id)} />
+                  <span className="type-filter-swatch" aria-hidden="true" />
+                  <span>{group.label}</span>
+                </label>
+              ))}
+              <button className="btn primary summary-filter-done" type="button" onClick={() => setOpen(false)}>Xong</button>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );

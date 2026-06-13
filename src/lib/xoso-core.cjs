@@ -1593,14 +1593,14 @@ function parseLegacyTickets(rawText, options = {}) {
     }
     let lineToProcess = originalLine;
     const normalizedLine = normalizeVN(originalLine).trim();
-    const isXienLine = /^(?:xien|dx|da)(?:\s*[234])?(?=\s|$)/i.test(normalizedLine) || (carryLoai && (carryLoai === 'Xien' || carryLoai.startsWith('Xien')));
+    const isXienLine = /^(?:xien|x|dx|da)(?:\s*[234])?(?=\s|$)/i.test(normalizedLine) || (carryLoai && (carryLoai === 'Xien' || carryLoai.startsWith('Xien')));
     if (isXienLine) {
       const stakeMatch = originalLine.match(/(?:\s+[x\*]\s*|\s+)(\d+(?:\.\d+)?\s*(?:n|k|d|m|diem|diểm|ngan|nghin|tr|trieu|triệu)?)\s*$/i);
       if (stakeMatch) {
         const stakeStr = stakeMatch[0];
         let content = originalLine.slice(0, originalLine.length - stakeStr.length).trim();
         let explicitLevel = 0;
-        const prefixMatch = content.match(/^(?:xi[eê]n|dx|da)\s*([234])?\s*/i);
+        const prefixMatch = content.match(/^(?:xi[eê]n|x|dx|da)\s*([234])?\s*/i);
         if (prefixMatch) {
           explicitLevel = prefixMatch[1] ? Number(prefixMatch[1]) : 0;
           content = content.slice(prefixMatch[0].length).trim();

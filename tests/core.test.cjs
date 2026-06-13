@@ -1406,3 +1406,24 @@ test('detect xiên groups from spaced separators and explicit levels', () => {
   assert.ok(parsed.tickets.some(ticket => ticket.loai === 'Xien2' && ticket.soList.join(',') === '33,44'));
   assert.ok(parsed.tickets.some(ticket => ticket.loai === 'Xien3' && ticket.soList.join(',') === '40,50,60'));
 });
+
+test('shorthand x requires explicit xiên group boundaries', () => {
+  const ambiguous = core.parseTelegramEnvelope({
+    text: 'ba (72):\nx 12,15,47,24,78,87,84,85,21. 100n',
+    region: 'bac',
+    activeDai: ['Miền Bắc'],
+  });
+  assert.equal(ambiguous.tickets.length, 0);
+  assert.equal(ambiguous.warnings.length, 1);
+  assert.match(ambiguous.warnings[0], /xiên không rõ nhóm/);
+
+  const grouped = core.parseTelegramEnvelope({
+    text: 'ba (72):\nx 12,15. 47,24. 100n',
+    region: 'bac',
+    activeDai: ['Miền Bắc'],
+  });
+  assert.equal(grouped.warnings.length, 0);
+  assert.equal(grouped.tickets.length, 2);
+  assert.deepEqual(grouped.tickets.map(ticket => ticket.soList), [['12', '15'], ['47', '24']]);
+  assert.ok(grouped.tickets.every(ticket => ticket.loai === 'Xien2'));
+});
