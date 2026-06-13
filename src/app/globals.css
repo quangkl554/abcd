@@ -1447,16 +1447,54 @@ tr:hover td {
 }
 
 .summary-row {
+  --player-tone: var(--blue);
   display: grid;
   gap: 4px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--player-tone) 28%, var(--line));
+  border-left: 4px solid var(--player-tone);
   border-radius: 8px;
   padding: 10px;
-  background: var(--panel-soft);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--player-tone) 9%, var(--panel)), var(--panel-soft));
 }
 
 .summary-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-weight: 900;
+}
+
+.summary-row span::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--player-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-tone) 15%, transparent);
+}
+
+.summary-row:nth-child(6n + 1) {
+  --player-tone: var(--blue);
+}
+
+.summary-row:nth-child(6n + 2) {
+  --player-tone: var(--rose);
+}
+
+.summary-row:nth-child(6n + 3) {
+  --player-tone: var(--teal);
+}
+
+.summary-row:nth-child(6n + 4) {
+  --player-tone: var(--amber);
+}
+
+.summary-row:nth-child(6n + 5) {
+  --player-tone: var(--purple);
+}
+
+.summary-row:nth-child(6n) {
+  --player-tone: var(--green);
 }
 
 .toggle {
@@ -1534,7 +1572,15 @@ tr:hover td {
   font-weight: 800;
 }
 
-.summary-table-row,
+.summary-table-row {
+  --player-tone: var(--blue);
+  border: 1px solid color-mix(in srgb, var(--player-tone) 28%, var(--line));
+  border-left: 4px solid var(--player-tone);
+  border-radius: 8px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--player-tone) 10%, var(--panel)), color-mix(in srgb, var(--player-tone) 5%, var(--panel-soft)));
+  padding: 10px 10px 10px 6px;
+}
+
 .stat-row {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1543,9 +1589,31 @@ tr:hover td {
 }
 
 .summary-table-row.highlight {
-  border-color: color-mix(in srgb, var(--green) 34%, var(--line));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 11%, var(--panel)), color-mix(in srgb, var(--blue) 7%, var(--panel-soft)));
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--green) 9%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--player-tone) 10%, transparent);
+}
+
+.summary-table-row.tone-blue {
+  --player-tone: var(--blue);
+}
+
+.summary-table-row.tone-rose {
+  --player-tone: var(--rose);
+}
+
+.summary-table-row.tone-teal {
+  --player-tone: var(--teal);
+}
+
+.summary-table-row.tone-amber {
+  --player-tone: var(--amber);
+}
+
+.summary-table-row.tone-lavender {
+  --player-tone: var(--purple);
+}
+
+.summary-table-row.tone-mint {
+  --player-tone: var(--green);
 }
 
 .summary-table-row span,
@@ -1554,9 +1622,22 @@ tr:hover td {
 }
 
 .summary-player-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.summary-player-name::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--player-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-tone) 15%, transparent);
 }
 
 .analytics-grid,

@@ -385,13 +385,34 @@ function ticketSourceLine(ticket: TicketLike, rawText: string) {
   const index = lines.findIndex(line => {
     const current = normalizeTicketLine(line);
     if (!current) return false;
-    return current === source || current.includes(source) || source.includes(current);
+    return current === source || current.includes(source) || source.includes(current) || lineContainsTicketSource(current, source);
   });
   return index >= 0 ? index + 1 : null;
 }
 
 function normalizeTicketLine(value: string) {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function lineContainsTicketSource(line: string, source: string) {
+  const sourceNumbers = standaloneTicketNumbers(source);
+  if (!sourceNumbers.length) return false;
+  const lineNumbers = new Set(standaloneTicketNumbers(line));
+  if (!sourceNumbers.every(number => lineNumbers.has(number))) return false;
+
+  const sourceStakes = stakeTokens(source);
+  if (!sourceStakes.length) return true;
+  const lineStakes = new Set(stakeTokens(line));
+  return sourceStakes.every(stake => lineStakes.has(stake));
+}
+
+function standaloneTicketNumbers(value: string) {
+  return [...value.matchAll(/(?:^|[^a-z0-9])(\d{2,4})(?![a-z0-9])/g)].map(match => match[1]);
+}
+
+function stakeTokens(value: string) {
+  return [...value.matchAll(/(?:^|[^a-z0-9])(\d+(?:\.\d+)?\s*[nkdm])(?![a-z0-9])/g)]
+    .map(match => match[1].replace(/\s+/g, ''));
 }
 
 function numberValue(value: unknown) {

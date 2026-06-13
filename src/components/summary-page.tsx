@@ -93,6 +93,7 @@ type DashboardMetric = {
 };
 
 type SummaryMetricTone = 'blue' | 'teal' | 'green' | 'amber' | 'rose' | 'lavender';
+type PlayerTone = 'blue' | 'rose' | 'teal' | 'amber' | 'lavender' | 'mint';
 
 const REGIONS: Array<{ id: RegionScope; label: string; short: string }> = [
   { id: 'all', label: 'Cả ngày', short: 'Cả ngày' },
@@ -100,6 +101,7 @@ const REGIONS: Array<{ id: RegionScope; label: string; short: string }> = [
   { id: 'trung', label: 'Miền Trung', short: 'Trung' },
   { id: 'bac', label: 'Miền Bắc', short: 'Bắc' },
 ];
+const PLAYER_TONES: PlayerTone[] = ['blue', 'rose', 'teal', 'amber', 'lavender', 'mint'];
 
 export function SummaryPage() {
   const [date, setDate] = useState(todayKey());
@@ -243,7 +245,7 @@ export function SummaryPage() {
                 <span>Vé</span><span>Xác</span><span>Thắng</span><span>Lãi lỗ</span>
               </div>
               {summaryRows.map((row, index) => (
-                <div className={`summary-table-row ${index < 3 ? 'highlight' : ''}`} key={row.playerId || row.playerName}>
+                <div className={`summary-table-row tone-${playerTone(index)} ${index < 3 ? 'highlight' : ''}`} key={row.playerId || row.playerName}>
                   <b className="summary-player-name">{row.playerName}</b>
                   <span>{row.soVe}</span>
                   <span>{money(row.tongXac)}</span>
@@ -277,6 +279,10 @@ export function SummaryPage() {
       </div>
     </main>
   );
+}
+
+function playerTone(index: number) {
+  return PLAYER_TONES[index % PLAYER_TONES.length];
 }
 
 function TicketTypeFilter({ selected, onChange }: { selected: TicketTypeGroupId[]; onChange: (next: TicketTypeGroupId[]) => void }) {

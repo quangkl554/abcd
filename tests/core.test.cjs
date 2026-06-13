@@ -1417,13 +1417,15 @@ test('shorthand x requires explicit xiên group boundaries', () => {
   assert.equal(ambiguous.warnings.length, 1);
   assert.match(ambiguous.warnings[0], /xiên không rõ nhóm/);
 
+  const groupedSource = 'x 12,15. 47,24. 100n';
   const grouped = core.parseTelegramEnvelope({
-    text: 'ba (72):\nx 12,15. 47,24. 100n',
+    text: `ba (72):\n${groupedSource}`,
     region: 'bac',
     activeDai: ['Miền Bắc'],
   });
   assert.equal(grouped.warnings.length, 0);
   assert.equal(grouped.tickets.length, 2);
   assert.deepEqual(grouped.tickets.map(ticket => ticket.soList), [['12', '15'], ['47', '24']]);
+  assert.deepEqual(grouped.tickets.map(ticket => ticket.sourceText), [groupedSource, groupedSource]);
   assert.ok(grouped.tickets.every(ticket => ticket.loai === 'Xien2'));
 });

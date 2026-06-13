@@ -1475,6 +1475,7 @@ function parseLegacyTickets(rawText, options = {}) {
     : getDefaultBetDai(region, date, activeDai);
   const globalDaiList = options.selectedDai && options.selectedDai.length ? options.selectedDai : defaultDai;
   const lines = String(rawText || '').split(/\r?\n/);
+  const sourceLines = [...lines];
   let carryDaiList = [...globalDaiList];
   let carryLoai = null;
   let carryPending = false;
@@ -1580,6 +1581,7 @@ function parseLegacyTickets(rawText, options = {}) {
 
   for (let ln = 0; ln < lines.length; ln++) {
     const originalLine = lines[ln];
+    const sourceLineText = sourceLines[ln] || originalLine;
     if (!originalLine.trim()) {
       carryDaiList = [...globalDaiList];
       carryLoai = null;
@@ -1628,6 +1630,7 @@ function parseLegacyTickets(rawText, options = {}) {
           });
           if (rewrittenGroups.length > 1) {
             lines.splice(ln + 1, 0, ...rewrittenGroups.slice(1));
+            sourceLines.splice(ln + 1, 0, ...rewrittenGroups.slice(1).map(() => sourceLineText));
           }
           lineToProcess = rewrittenGroups[0];
         }
@@ -1762,7 +1765,7 @@ function parseLegacyTickets(rawText, options = {}) {
       if (!loai) loai = 'Lo';
       if (nums.length === 0) {
         if (!loai.startsWith('Xiu')) return;
-        const ve = makeTicket([], loai, tien, dais, { ...options, region, activeDai, sourceText: originalLine });
+        const ve = makeTicket([], loai, tien, dais, { ...options, region, activeDai, sourceText: sourceLineText });
         if (ve) {
           result.push(ve);
           created.push(ve);
@@ -1778,7 +1781,7 @@ function parseLegacyTickets(rawText, options = {}) {
           for (let k = 0; k < nums.length; k += level) {
             const chunk = nums.slice(k, k + level);
             if (chunk.length < 2) continue;
-            const ve = makeTicket(chunk, `Xien${chunk.length}`, tien, dais, { ...options, region, activeDai, sourceText: originalLine });
+            const ve = makeTicket(chunk, `Xien${chunk.length}`, tien, dais, { ...options, region, activeDai, sourceText: sourceLineText });
             if (ve) {
               result.push(ve);
               created.push(ve);
@@ -1787,7 +1790,7 @@ function parseLegacyTickets(rawText, options = {}) {
         } else {
           const actualLoai = nums.length === 2 ? 'Xien2' : nums.length === 3 ? 'Xien3' : nums.length >= 4 ? 'Xien4' : '';
           if (actualLoai) {
-            const ve = makeTicket(nums, actualLoai, tien, dais, { ...options, region, activeDai, sourceText: originalLine });
+            const ve = makeTicket(nums, actualLoai, tien, dais, { ...options, region, activeDai, sourceText: sourceLineText });
             if (ve) {
               result.push(ve);
               created.push(ve);
@@ -1807,7 +1810,7 @@ function parseLegacyTickets(rawText, options = {}) {
         groups[len].push(n);
       }
       for (const groupNums of Object.values(groups)) {
-        const ve = makeTicket(groupNums, loai, tien, dais, { ...options, region, activeDai, sourceText: originalLine });
+        const ve = makeTicket(groupNums, loai, tien, dais, { ...options, region, activeDai, sourceText: sourceLineText });
         if (ve) {
           result.push(ve);
           created.push(ve);

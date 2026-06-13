@@ -43,15 +43,8 @@ export async function parseAndStoreTicketMessage(args: {
     .single();
   if (messageError) throw messageError;
 
-  // Pre-split the message text for fast source line calculation
-  const textLines = args.text.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim().toLowerCase());
   const ticketRows = (parsed.tickets || []).map(ticket => {
-    const source = (ticket.sourceText || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    let sourceLineNo: number | null = null;
-    if (source) {
-      const idx = textLines.findIndex(line => line === source || line.includes(source) || source.includes(line));
-      if (idx >= 0) sourceLineNo = idx + 1;
-    }
+    const sourceLineNo = computeSourceLineNo(ticket.sourceText || '', args.text);
     return serializeTicket(ticket, {
       ownerId: args.ownerId,
       messageId: message.id,
@@ -180,14 +173,8 @@ export async function reparseTicketMessage(args: {
     .single();
   if (updateError) throw updateError;
 
-  const nextRawTextLines = nextRawText.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim().toLowerCase());
   let ticketRows = (parsed.tickets || []).map(ticket => {
-    const source = (ticket.sourceText || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    let sourceLineNo: number | null = null;
-    if (source) {
-      const idx = nextRawTextLines.findIndex(line => line === source || line.includes(source) || source.includes(line));
-      if (idx >= 0) sourceLineNo = idx + 1;
-    }
+    const sourceLineNo = computeSourceLineNo(ticket.sourceText || '', nextRawText);
     return serializeTicket(ticket, {
       ownerId: args.ownerId,
       messageId: args.messageId,

@@ -107,7 +107,7 @@ type EditingLine = {
 type DashboardDialog =
   | { type: 'delete-player'; playerId: string; playerName: string }
   | { type: 'delete-ticket-line'; messageId: string; ticketId: string; sourceText: string; sourceLineNumber: number | null; playerId: string | null; playerName: string }
-  | { type: 'reset'; scope: 'day-region' | 'all'; label: string };
+  | { type: 'reset'; scope: 'day-region' | 'player-day-region' | 'all'; label: string; playerId?: string; playerName?: string };
 
 const REGIONS: Array<{ id: Region; label: string; short: string }> = [
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
@@ -339,7 +339,23 @@ export function Dashboard() {
     });
   }
 
-  async function resetData(scope: 'day-region' | 'all') {
+  async function resetData(scope: 'day-region' | 'player-day-region' | 'all') {
+    if (scope === 'player-day-region') {
+      if (!activePlayer) {
+        setError('Chọn khách trước khi xóa tin theo khách/miền.');
+        return;
+      }
+      setDialogConfirm('');
+      setDialog({
+        type: 'reset',
+        scope,
+        label: `tất cả tin của ${activePlayer.name} trong ${regionName(region)} ngày ${date}`,
+        playerId: activePlayer.id,
+        playerName: activePlayer.name,
+      });
+      return;
+    }
+
     const label = scope === 'all' ? 'toàn bộ dữ liệu của tài khoản này' : `dữ liệu ngày ${date} - ${regionName(region)}`;
     setDialogConfirm('');
     setDialog({ type: 'reset', scope, label });
@@ -378,10 +394,16 @@ export function Dashboard() {
     if (dialogConfirm.trim() !== 'XOA TAT CA') return;
     const body = dialog.scope === 'all'
       ? { scope: dialog.scope, confirm: dialogConfirm.trim() }
+      : dialog.scope === 'player-day-region'
+        ? { scope: dialog.scope, confirm: dialogConfirm.trim(), date, region, playerId: dialog.playerId, playerName: dialog.playerName }
       : { scope: dialog.scope, confirm: dialogConfirm.trim(), date, region };
     const response = await apiDelete('/api/workspace/reset', body);
     if (!response.ok) return setError(response.error);
-    setNotice(dialog.scope === 'all' ? 'Đã xóa toàn bộ dữ liệu của tài khoản.' : 'Đã xóa dữ liệu ngày/miền hiện tại.');
+    setNotice(dialog.scope === 'all'
+      ? 'Đã xóa toàn bộ dữ liệu của tài khoản.'
+      : dialog.scope === 'player-day-region'
+        ? `Đã xóa tin của ${dialog.playerName || 'khách đang chọn'} trong ${regionName(region)} ngày ${date}.`
+        : 'Đã xóa dữ liệu ngày/miền hiện tại.');
     setDialog(null);
     setDialogConfirm('');
     await loadWorkspace({ force: true });
@@ -545,6 +567,9 @@ export function Dashboard() {
             </div>
             <p className="section-note">Các nút này yêu cầu nhập đúng cụm <b>XOA TAT CA</b> trước khi xóa.</p>
             <div className="form-grid">
+              <button className="btn amber" type="button" onClick={() => resetData('player-day-region')} disabled={!activePlayer}>
+                <Trash2 size={16} /> Xóa tin khách/miền này
+              </button>
               <button className="btn amber" type="button" onClick={() => resetData('day-region')}><Trash2 size={16} /> Xóa ngày/miền này</button>
               <button className="btn red" type="button" onClick={() => resetData('all')}><Trash2 size={16} /> Xóa tất cả dữ liệu</button>
             </div>
