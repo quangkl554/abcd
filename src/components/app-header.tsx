@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react';
+import { BarChart3, FileText, ListChecks, LogOut, Moon, Settings, Sun, Tickets, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type AppHeaderProps = {
@@ -39,17 +39,17 @@ export function AppHeader({ username, role, activePage }: AppHeaderProps) {
   return (
     <header className="topbar">
       <div className="brand">
-        <div className="brand-mark">Số</div>
+        <div className="brand-mark"><Tickets size={22} /></div>
         <div>
-          <div className="brand-title">Hệ thống tự động số</div>
-          <div className="brand-subtitle">Nhập tin, dò kết quả, tổng hợp lãi lỗ</div>
+          <div className="brand-title">Sổ số tự động</div>
+          <div className="brand-subtitle">Nhập vé · Dò kết quả · Tổng hợp lãi lỗ</div>
         </div>
       </div>
 
       <nav className="page-tabs" aria-label="Điều hướng chính">
-        <Link className={`page-tab ${activePage === 'tickets' ? 'active' : ''}`} href="/app">Vé</Link>
-        <Link className={`page-tab ${activePage === 'results' ? 'active' : ''}`} href="/results">Kết quả</Link>
-        <Link className={`page-tab ${activePage === 'summary' ? 'active' : ''}`} href="/summary">Tổng hợp</Link>
+        <Link className={`page-tab ${activePage === 'tickets' ? 'active' : ''}`} href="/app"><FileText size={16} /> Vé</Link>
+        <Link className={`page-tab ${activePage === 'results' ? 'active' : ''}`} href="/results"><ListChecks size={16} /> Kết quả</Link>
+        <Link className={`page-tab ${activePage === 'summary' ? 'active' : ''}`} href="/summary"><BarChart3 size={16} /> Tổng hợp</Link>
       </nav>
 
       <div className="topbar-actions">

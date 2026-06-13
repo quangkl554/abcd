@@ -1399,40 +1399,69 @@ function findWeirdCharacters(line) {
   return out.slice(0, 8);
 }
 
-function splitXienGroups(content) {
-  const hasComma = content.includes(',');
-  const hasDot = content.includes('.');
+function cleanXienGroup(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^[,.;/|]+|[,.;/|]+$/g, '')
+    .trim();
+}
 
-  if (hasComma && hasDot) {
-    const countComma = (content.match(/,/g) || []).length;
-    const countDot = (content.match(/\./g) || []).length;
-    if (countDot <= countComma) {
-      return {
-        groups: content.split('.').map(g => g.trim()).filter(Boolean),
-        ambiguous: false
-      };
-    } else {
-      return {
-        groups: content.split(',').map(g => g.trim()).filter(Boolean),
-        ambiguous: false
-      };
+function xienGroupNumberCount(value) {
+  return cleanXienGroup(value)
+    .replace(/[,.;/|]+/g, ' ')
+    .split(/\s+/)
+    .filter(tok => /^\d{2,4}$/.test(tok)).length;
+}
+
+function splitXienGroups(content, explicitLevel = 0) {
+  const raw = cleanXienGroup(content);
+  const candidates = [];
+
+  const addCandidate = (parts, score) => {
+    const groups = parts.map(cleanXienGroup).filter(Boolean);
+    if (groups.length < 2 || groups.some(group => {
+      const count = xienGroupNumberCount(group);
+      return count < 2 || count > 4;
+    })) return;
+    const signature = groups.join('|');
+    if (!candidates.some(candidate => candidate.signature === signature)) {
+      candidates.push({ groups, score, signature });
     }
+  };
+
+  for (const delimiter of [';', '/', '|']) {
+    if (raw.includes(delimiter)) addCandidate(raw.split(delimiter), 100);
   }
 
-  const tokens = content.replace(/[,.]/g, ' ').split(/\s+/).filter(Boolean);
-  const numCount = tokens.filter(tok => /^\d{2,4}$/.test(tok)).length;
+  for (const delimiter of [',', '.']) {
+    const escaped = delimiter === '.' ? '\\.' : delimiter;
+    addCandidate(raw.split(new RegExp(`\\s+${escaped}\\s+`)), 95);
+    addCandidate(raw.split(new RegExp(`${escaped}\\s+`)), 85);
+  }
 
-  if (numCount > 4) {
+  if (raw.includes(',') && raw.includes('.')) {
+    addCandidate(raw.split('.'), 70);
+    addCandidate(raw.split(','), 70);
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.groups.length - b.groups.length);
+  if (candidates.length) {
+    const top = candidates[0];
+    const equallyLikely = candidates.find(candidate => candidate.score === top.score && candidate.signature !== top.signature);
     return {
-      groups: [content],
-      ambiguous: true
+      groups: top.groups,
+      ambiguous: Boolean(equallyLikely),
     };
   }
 
-  return {
-    groups: [content],
-    ambiguous: false
-  };
+  const numCount = xienGroupNumberCount(raw);
+  if (explicitLevel && numCount >= explicitLevel && numCount % explicitLevel === 0) {
+    return { groups: [raw], ambiguous: false };
+  }
+  if (numCount >= 2 && numCount <= 4) {
+    return { groups: [raw], ambiguous: false };
+  }
+  return { groups: [raw], ambiguous: numCount > 0 };
 }
 
 function parseLegacyTickets(rawText, options = {}) {
@@ -1564,30 +1593,38 @@ function parseLegacyTickets(rawText, options = {}) {
     }
     let lineToProcess = originalLine;
     const normalizedLine = normalizeVN(originalLine).trim();
-    const isXienLine = /^(xien|dx|da)\b/i.test(normalizedLine) || (carryLoai && (carryLoai === 'Xien' || carryLoai.startsWith('Xien')));
+    const isXienLine = /^(?:xien|dx|da)(?:\s*[234])?(?=\s|$)/i.test(normalizedLine) || (carryLoai && (carryLoai === 'Xien' || carryLoai.startsWith('Xien')));
     if (isXienLine) {
-      const stakeMatch = originalLine.match(/(?:\s+[x\*])?\s+(\d+(?:\.\d+)?\s*(?:n|k|d|m|diem|diểm|ngan|nghin|tr|trieu|triệu)?)$/i);
+      const stakeMatch = originalLine.match(/(?:\s+[x\*]\s*|\s+)(\d+(?:\.\d+)?\s*(?:n|k|d|m|diem|diểm|ngan|nghin|tr|trieu|triệu)?)\s*$/i);
       if (stakeMatch) {
         const stakeStr = stakeMatch[0];
         let content = originalLine.slice(0, originalLine.length - stakeStr.length).trim();
-        let prefix = '';
-        const prefixMatch = content.match(/^(xi[eê]n|dx|da)\s*/i);
+        let explicitLevel = 0;
+        const prefixMatch = content.match(/^(?:xi[eê]n|dx|da)\s*([234])?\s*/i);
         if (prefixMatch) {
-          prefix = prefixMatch[0];
-          content = content.slice(prefix.length).trim();
+          explicitLevel = prefixMatch[1] ? Number(prefixMatch[1]) : 0;
+          content = content.slice(prefixMatch[0].length).trim();
         }
-        const splitRes = splitXienGroups(content);
+        const splitRes = splitXienGroups(content, explicitLevel);
         if (splitRes.ambiguous) {
-          warnings.push(`Dòng ${ln + 1}: xiên không rõ nhóm (chỉ có một loại dấu ngăn cách nhưng có nhiều số). Vui lòng dùng dấu chấm (.) để tách nhóm và dấu phẩy (,) để tách số (ví dụ: 12,14. 15,16. x 100n).`);
+          warnings.push(`Dòng ${ln + 1}: xiên không rõ nhóm nên chưa tạo vé. Vui lòng dùng dấu chấm, dấu chấm phẩy hoặc dấu phẩy có khoảng trắng để tách tổ (ví dụ: 12,14. 15,16. x 100n).`);
+          continue;
         }
         if (splitRes.groups.length >= 1) {
-          const rewrittenGroups = splitRes.groups.map(g => {
-            const cleanG = g.trim();
-            const groupTokens = cleanG.replace(/[,.]/g, ' ').split(/\s+/).filter(Boolean);
-            const groupNumCount = groupTokens.filter(tok => /^\d{2,4}$/.test(tok)).length;
-            const cleanPrefix = prefix.replace(/\d+$/, '').trim(); // strip any existing level digits at end
-            const newPrefix = (groupNumCount >= 2 && groupNumCount <= 4) ? `xien${groupNumCount}` : (cleanPrefix || 'xien');
-            return newPrefix + ' ' + cleanG + stakeStr;
+          const invalidGroup = splitRes.groups.some(group => {
+            const count = xienGroupNumberCount(group);
+            if (!explicitLevel) return count < 2 || count > 4;
+            return splitRes.groups.length === 1 ? count % explicitLevel !== 0 : count !== explicitLevel;
+          });
+          if (invalidGroup) {
+            warnings.push(`Dòng ${ln + 1}: số lượng số trong tổ xiên không khớp loại xiên nên chưa tạo vé.`);
+            continue;
+          }
+          const rewrittenGroups = splitRes.groups.map(group => {
+            const cleanG = cleanXienGroup(group);
+            const groupNumCount = xienGroupNumberCount(cleanG);
+            const level = explicitLevel || groupNumCount;
+            return `xien${level} ${cleanG}${stakeStr}`;
           });
           if (rewrittenGroups.length > 1) {
             lines.splice(ln + 1, 0, ...rewrittenGroups.slice(1));
@@ -2136,6 +2173,16 @@ function regionFromOnlyLine(line) {
   return compact && REGION_ALIASES[compact] ? REGION_ALIASES[compact] : null;
 }
 
+function inlineBaoLoRegion(line) {
+  const match = normalizeVN(String(line || '')).match(/\bbl(mt|mb|mn)\b/);
+  if (!match) return null;
+  const region = match[1] === 'mt' ? REGION.TRUNG : match[1] === 'mb' ? REGION.BAC : REGION.NAM;
+  return {
+    region,
+    text: String(line || '').replace(/\bbl(?:mt|mb|mn)\b/i, 'bl'),
+  };
+}
+
 function parsePlayerHeadingLine(line, region = REGION.NAM) {
   const raw = String(line || '').trim();
   if (!raw || regionFromOnlyLine(raw)) return null;
@@ -2317,22 +2364,32 @@ function splitRegionSections(rawText, defaultRegion) {
   let current = { region: canonicalRegion(defaultRegion), lines: [] };
   const sections = [current];
   let sawHeading = false;
+  let lastRegion = current.region;
   for (const line of String(rawText || '').split(/\r?\n/)) {
     const headingRegion = regionFromOnlyLine(line);
     if (headingRegion) {
       current = { region: headingRegion, lines: [] };
       sections.push(current);
       sawHeading = true;
+      lastRegion = headingRegion;
+      continue;
+    }
+    const inlineRegion = inlineBaoLoRegion(line);
+    if (inlineRegion) {
+      sections.push({ region: inlineRegion.region, lines: [inlineRegion.text] });
+      sawHeading = true;
+      lastRegion = inlineRegion.region;
       continue;
     }
     current.lines.push(line);
+    if (line.trim()) lastRegion = current.region;
   }
   return {
     sawHeading,
     sections: sections
       .map(section => ({ region: section.region, text: section.lines.join('\n').trim() }))
       .filter(section => section.text),
-    lastRegion: current.region,
+    lastRegion,
   };
 }
 

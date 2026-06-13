@@ -1333,6 +1333,9 @@ test('parse regional bao lo aliases blmt, blmb, blmn', () => {
   assert.equal(t1.loai, 'Lo');
   assert.equal(t2.loai, 'Lo');
   assert.equal(t3.loai, 'Lo');
+  assert.equal(t1.region, 'trung');
+  assert.equal(t2.region, 'bac');
+  assert.equal(t3.region, 'nam');
   assert.equal(t1.tienDat, 100);
   assert.equal(t2.tienDat, 200);
   assert.equal(t3.tienDat, 300);
@@ -1378,6 +1381,28 @@ test('warn on ambiguous xiên lines with only commas/dots', () => {
     region: 'bac',
     activeDai: ['Miền Bắc'],
   });
+  assert.equal(parsed.tickets.length, 0);
   assert.equal(parsed.warnings.length, 1);
   assert.match(parsed.warnings[0], /xiên không rõ nhóm/);
+});
+
+test('detect xiên groups from spaced separators and explicit levels', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: [
+      'người 1:',
+      'xiên 12,14,53 , 14,24,52 , 12,53 x100n',
+      'xiên2 11 22 33 44 x 50n',
+      'xiên 3 10,20,30; 40,50,60 x 70n',
+    ].join('\n'),
+    region: 'bac',
+    activeDai: ['Miền Bắc'],
+  });
+
+  assert.equal(parsed.warnings.length, 0);
+  assert.equal(parsed.tickets.length, 7);
+  assert.equal(parsed.tickets.filter(ticket => ticket.loai === 'Xien3').length, 4);
+  assert.equal(parsed.tickets.filter(ticket => ticket.loai === 'Xien2').length, 3);
+  assert.ok(parsed.tickets.some(ticket => ticket.loai === 'Xien2' && ticket.soList.join(',') === '11,22'));
+  assert.ok(parsed.tickets.some(ticket => ticket.loai === 'Xien2' && ticket.soList.join(',') === '33,44'));
+  assert.ok(parsed.tickets.some(ticket => ticket.loai === 'Xien3' && ticket.soList.join(',') === '40,50,60'));
 });

@@ -4,13 +4,14 @@ import { authErrorResponse, requireActiveUser } from '@/lib/auth';
 import { type Region } from '@/lib/core';
 import { jsonError, jsonOk } from '@/lib/http';
 import { dateSchema, regionSchema } from '@/lib/validation';
+import { normalizeTicketTypeGroupIds, ticketTypesForGroups } from '@/lib/ticket-type-groups';
 import {
   applyTicketPlayerFilter,
   fetchTicketStatCounts,
-  filterTicketsByPlayer,
   groupByDai,
   groupDailyByRegion,
   groupByPlayer,
+  groupByRegion,
   groupByStatus,
   groupByType,
   playerSummaryFromDaily,
@@ -35,6 +36,8 @@ export async function GET(request: NextRequest) {
     const region = regionScopeSchema.parse(url.searchParams.get('region')) as RegionScope;
     const playerId = playerIdSchema.parse(url.searchParams.get('playerId') || undefined);
     const section = sectionSchema.parse(url.searchParams.get('section') || undefined);
+    const ticketTypeGroups = normalizeTicketTypeGroupIds(url.searchParams.get('ticketTypes'));
+    const ticketTypes = ticketTypesForGroups(ticketTypeGroups);
 
     const players = await supabase
       .from('players')
@@ -49,11 +52,36 @@ export async function GET(request: NextRequest) {
     const playerScope = resolvePlayerScope(playerRows, playerId);
 
     if (section === 'details') {
-      const tickets = await buildTicketQuery(supabase, user.id, date, region, playerScope);
+      const tickets = await buildTicketQuery(supabase, user.id, date, region, playerScope, ticketTypes);
       if (tickets.error) throw tickets.error;
 
       const scopedTickets = tickets.data || [];
       return jsonOk({
+        byDai: groupByDai(scopedTickets),
+        byStatus: groupByStatus(scopedTickets),
+        byType: groupByType(scopedTickets),
+      });
+    }
+
+    if (ticketTypes.length) {
+      const tickets = await buildTicketQuery(supabase, user.id, date, region, playerScope, ticketTypes);
+      if (tickets.error) throw tickets.error;
+      const scopedTickets = tickets.data || [];
+      const summaryRows = groupByPlayer(scopedTickets);
+      const overview = {
+        profile,
+        config: summaryConfig(region, date),
+        players: playerRows,
+        totals: summarizeTickets(scopedTickets),
+        summary: summaryRows,
+        topPlayers: summaryRows.slice(0, 5),
+        byRegion: groupByRegion(scopedTickets),
+      };
+
+      if (section === 'overview') return jsonOk(overview);
+
+      return jsonOk({
+        ...overview,
         byDai: groupByDai(scopedTickets),
         byStatus: groupByStatus(scopedTickets),
         byType: groupByType(scopedTickets),
@@ -93,7 +121,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const tickets = await buildTicketQuery(supabase, user.id, date, region, playerScope);
+    const tickets = await buildTicketQuery(supabase, user.id, date, region, playerScope, ticketTypes);
     if (tickets.error) throw tickets.error;
     const scopedTickets = tickets.data || [];
 
@@ -121,6 +149,7 @@ function buildTicketQuery(
   date: string,
   region: RegionScope,
   playerScope: ReturnType<typeof resolvePlayerScope>,
+  ticketTypes: string[] = [],
 ) {
   let query = supabase
     .from('tickets')
@@ -130,6 +159,10 @@ function buildTicketQuery(
 
   if (region !== 'all') {
     query = query.eq('region', region as Region);
+  }
+
+  if (ticketTypes.length) {
+    query = query.in('loai', ticketTypes);
   }
 
   return applyTicketPlayerFilter(query, playerScope);

@@ -5,8 +5,10 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BarChart3,
+  Check,
   CircleDollarSign,
   FileText,
+  Filter,
   Gauge,
   ListChecks,
   RefreshCw,
@@ -16,6 +18,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { useWorkspaceData } from '@/lib/use-workspace-data';
+import { TICKET_TYPE_GROUPS, type TicketTypeGroupId } from '@/lib/ticket-type-groups';
 import { AppHeader } from './app-header';
 import { WorkDatePicker } from './work-date-picker';
 
@@ -88,6 +91,8 @@ type DashboardMetric = {
   percent: number;
 };
 
+type SummaryMetricTone = 'blue' | 'teal' | 'green' | 'amber' | 'rose' | 'lavender';
+
 const REGIONS: Array<{ id: RegionScope; label: string; short: string }> = [
   { id: 'all', label: 'Cả ngày', short: 'Cả ngày' },
   { id: 'nam', label: 'Miền Nam', short: 'Nam' },
@@ -99,18 +104,24 @@ export function SummaryPage() {
   const [date, setDate] = useState(todayKey());
   const [region, setRegion] = useState<RegionScope>('all');
   const [selectedPlayerId, setSelectedPlayerId] = useState('all');
+  const [selectedTypeGroups, setSelectedTypeGroups] = useState<TicketTypeGroupId[]>([]);
   const [dashboardVisible, setDashboardVisible] = useState(false);
   const dashboardRef = useRef<HTMLDivElement | null>(null);
-  const workspaceParams = useMemo(() => (
-    selectedPlayerId === 'all' ? { section: 'overview' } : { section: 'overview', playerId: selectedPlayerId }
-  ), [selectedPlayerId]);
+  const ticketTypesParam = selectedTypeGroups.join(',');
+  const workspaceParams = useMemo(() => ({
+    section: 'overview',
+    playerId: selectedPlayerId === 'all' ? undefined : selectedPlayerId,
+    ticketTypes: ticketTypesParam || undefined,
+  }), [selectedPlayerId, ticketTypesParam]);
   const { workspace, loading, error, loadWorkspace } = useWorkspaceData<Workspace>(date, region, {
     endpoint: 'summary',
     params: workspaceParams,
   });
-  const detailsParams = useMemo(() => (
-    selectedPlayerId === 'all' ? { section: 'details' } : { section: 'details', playerId: selectedPlayerId }
-  ), [selectedPlayerId]);
+  const detailsParams = useMemo(() => ({
+    section: 'details',
+    playerId: selectedPlayerId === 'all' ? undefined : selectedPlayerId,
+    ticketTypes: ticketTypesParam || undefined,
+  }), [selectedPlayerId, ticketTypesParam]);
   const { workspace: details, loading: detailsLoading, loadWorkspace: loadDetails } = useWorkspaceData<DetailsWorkspace>(date, region, {
     endpoint: 'summary',
     params: detailsParams,
@@ -184,43 +195,31 @@ export function SummaryPage() {
               <Link className="btn soft" href="/app"><FileText size={17} /> Vé</Link>
               <Link className="btn soft" href="/results"><ListChecks size={17} /> Kết quả</Link>
             </div>
+            <TicketTypeFilter selected={selectedTypeGroups} onChange={setSelectedTypeGroups} />
             {loading ? <span className="loading-chip"><RefreshCw size={14} className="spin" /> Đang tải</span> : null}
           </section>
 
           {error ? <div className="error">{error}</div> : null}
 
           <section className="summary-grid">
-            <div className="metric metric-blue"><span>Vé trong ngày</span><strong>{totals.tickets}</strong><small>{workspace?.config.regionName || regionName(region)}</small></div>
-            <div className="metric metric-teal"><span>Tổng xác</span><strong>{money(totals.xac)}</strong><small>Tiền nhận</small></div>
-            <div className="metric metric-green"><span>Tổng thắng</span><strong>{money(totals.win)}</strong><small>{totals.checked} vé đã dò</small></div>
-            <div className="metric metric-amber"><span>Lãi lỗ</span><strong className={totals.win - totals.xac >= 0 ? 'positive' : 'negative'}>{money(totals.win - totals.xac)}</strong><small>Theo ngày/miền</small></div>
+            <SummaryMetricCard icon={<FileText size={18} />} tone="blue" label="Vé trong ngày" value={String(totals.tickets)} detail={workspace?.config.regionName || regionName(region)} />
+            <SummaryMetricCard icon={<CircleDollarSign size={18} />} tone="teal" label="Tổng xác" value={money(totals.xac)} detail="Tiền nhận" />
+            <SummaryMetricCard icon={<Trophy size={18} />} tone="green" label="Tổng thắng" value={money(totals.win)} detail={`${totals.checked} vé đã dò`} />
+            <SummaryMetricCard icon={<TrendingUp size={18} />} tone="amber" label="Lãi lỗ" value={money(totals.win - totals.xac)} detail="Theo ngày/miền" valueClassName={totals.win - totals.xac >= 0 ? 'positive' : 'negative'} />
           </section>
 
-          <section className="summary-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginTop: '16px', gap: '16px' }}>
-            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Số khách đã chơi</span>
-              <strong style={{ fontSize: '20px', color: 'var(--text-color)' }}>{summaryRows.length} khách</strong>
-              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Có vé cược hôm nay</small>
-            </div>
-            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Số đài hoạt động</span>
-              <strong style={{ fontSize: '20px', color: 'var(--text-color)' }}>
-                {region === 'all' 
-                  ? byRegion.filter(r => r.count > 0).length 
-                  : byDai.filter(d => d.count > 0).length || (workspace?.config.activeDai?.length || 0)} đài
-              </strong>
-              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Phát sinh vé cược</small>
-            </div>
-            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Giá trị vé trung bình</span>
-              <strong style={{ fontSize: '20px', color: 'var(--text-color)' }}>{money(totals.averageXac)}</strong>
-              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Xác trung bình trên vé</small>
-            </div>
-            <div className="metric" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Hiệu suất trúng vé</span>
-              <strong style={{ fontSize: '20px', color: '#10B981' }}>{totals.hitRate}%</strong>
-              <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{totals.hitCount} / {totals.checked || totals.tickets} vé đã dò</small>
-            </div>
+          <section className="summary-grid summary-secondary-grid">
+            <SummaryMetricCard icon={<UsersRound size={18} />} tone="lavender" label="Số khách đã chơi" value={`${summaryRows.length} khách`} detail="Có vé cược hôm nay" compact />
+            <SummaryMetricCard
+              icon={<Target size={18} />}
+              tone="rose"
+              label="Số đài hoạt động"
+              value={`${region === 'all' ? byRegion.filter(row => row.count > 0).length : byDai.filter(row => row.count > 0).length || (workspace?.config.activeDai?.length || 0)} đài`}
+              detail="Phát sinh vé cược"
+              compact
+            />
+            <SummaryMetricCard icon={<Gauge size={18} />} tone="blue" label="Giá trị vé trung bình" value={money(totals.averageXac)} detail="Xác trung bình trên vé" compact />
+            <SummaryMetricCard icon={<Activity size={18} />} tone="green" label="Hiệu suất trúng vé" value={`${totals.hitRate}%`} detail={`${totals.hitCount} / ${totals.checked || totals.tickets} vé đã dò`} compact valueClassName="positive" />
           </section>
 
           <section className="section">
@@ -276,6 +275,62 @@ export function SummaryPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function TicketTypeFilter({ selected, onChange }: { selected: TicketTypeGroupId[]; onChange: (next: TicketTypeGroupId[]) => void }) {
+  function toggle(groupId: TicketTypeGroupId) {
+    onChange(selected.includes(groupId) ? selected.filter(id => id !== groupId) : [...selected, groupId]);
+  }
+
+  return (
+    <div className="summary-type-filter">
+      <div className="summary-type-filter-title">
+        <Filter size={17} />
+        <div>
+          <b>Lọc loại vé tổng hợp</b>
+          <span>{selected.length ? `Đang chọn ${selected.length} nhóm` : 'Tất cả loại vé'}</span>
+        </div>
+      </div>
+      <div className="summary-type-filter-options" role="group" aria-label="Lọc loại vé tổng hợp">
+        <button className={`type-filter-chip tone-neutral ${selected.length ? '' : 'active'}`} type="button" aria-pressed={!selected.length} onClick={() => onChange([])}>
+          {!selected.length ? <Check size={14} /> : null} Tất cả
+        </button>
+        {TICKET_TYPE_GROUPS.map(group => {
+          const active = selected.includes(group.id);
+          return (
+            <button
+              className={`type-filter-chip tone-${group.tone} ${active ? 'active' : ''}`}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggle(group.id)}
+              key={group.id}
+            >
+              {active ? <Check size={14} /> : <span className="type-filter-swatch" aria-hidden="true" />}
+              {group.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SummaryMetricCard({ icon, tone, label, value, detail, compact = false, valueClassName = '' }: {
+  icon: ReactNode;
+  tone: SummaryMetricTone;
+  label: string;
+  value: string;
+  detail: string;
+  compact?: boolean;
+  valueClassName?: string;
+}) {
+  return (
+    <div className={`metric metric-${tone} ${compact ? 'compact' : ''}`}>
+      <div className="metric-heading"><span className="metric-icon">{icon}</span><span>{label}</span></div>
+      <strong className={valueClassName}>{value}</strong>
+      <small>{detail}</small>
+    </div>
   );
 }
 
