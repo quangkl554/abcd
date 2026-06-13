@@ -1275,3 +1275,109 @@ test('format report and split Telegram messages', () => {
   assert.equal(report.includes('STT |'), false);
   assert.equal(core.splitTelegramMessages(report, 40).length > 1, true);
 });
+
+test('parse compact dual stake tokens like 100d50d and 100d100d', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\n90 100d50d\n91 100d100d',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.equal(parsed.tickets.length, 3);
+  // 90 100d50d should parse as 90 Dau 100d and 90 Duoi 50d
+  const t1 = parsed.tickets.find(t => t.soList.includes('90') && t.loai === 'Dau');
+  const t2 = parsed.tickets.find(t => t.soList.includes('90') && t.loai === 'Duoi');
+  assert.ok(t1);
+  assert.ok(t2);
+  assert.equal(t1.tienDat, 100);
+  assert.equal(t2.tienDat, 50);
+
+  // 91 100d100d should parse as 91 DauDuoi 100d
+  const t3 = parsed.tickets.find(t => t.soList.includes('91'));
+  assert.ok(t3);
+  assert.equal(t3.loai, 'DauDuoi');
+  assert.equal(t3.tienDat, 100);
+});
+
+test('parse lines with repeated separators like .., //, ,,', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\ndd 90//100d..50d\n91,,100d',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.equal(parsed.tickets.length, 3);
+  const t1 = parsed.tickets.find(t => t.soList.includes('90') && t.loai === 'Dau');
+  const t2 = parsed.tickets.find(t => t.soList.includes('90') && t.loai === 'Duoi');
+  assert.ok(t1);
+  assert.ok(t2);
+  assert.equal(t1.tienDat, 100);
+  assert.equal(t2.tienDat, 50);
+
+  const t3 = parsed.tickets.find(t => t.soList.includes('91'));
+  assert.ok(t3);
+  assert.equal(t3.tienDat, 100);
+});
+
+test('parse regional bao lo aliases blmt, blmb, blmn', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\n90 blmt 100n\n91 blmb 200n\n92 blmn 300n',
+    region: 'nam',
+    activeDai: ['TP.HCM'],
+  });
+  assert.equal(parsed.tickets.length, 3);
+  const t1 = parsed.tickets.find(t => t.soList.includes('90'));
+  const t2 = parsed.tickets.find(t => t.soList.includes('91'));
+  const t3 = parsed.tickets.find(t => t.soList.includes('92'));
+  assert.ok(t1);
+  assert.ok(t2);
+  assert.ok(t3);
+  assert.equal(t1.loai, 'Lo');
+  assert.equal(t2.loai, 'Lo');
+  assert.equal(t3.loai, 'Lo');
+  assert.equal(t1.tienDat, 100);
+  assert.equal(t2.tienDat, 200);
+  assert.equal(t3.tienDat, 300);
+  assert.equal(parsed.warnings.length, 0); // No warnings about "mb" or "mn" being skipped
+});
+
+test('auto-detect xiên groups with dots and commas', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\nxiên 12,14,53. 14,24,52. 12,53. x 100n\nxiên 11.22, 33.44 x 50k',
+    region: 'bac',
+    activeDai: ['Miền Bắc'],
+  });
+  // Should parse:
+  // - 12,14,53 as Xien3 x 100n
+  // - 14,24,52 as Xien3 x 100n
+  // - 12,53 as Xien2 x 100n
+  // - 11.22 as Xien2 x 50k (using carryLoai = Xien)
+  // - 33.44 as Xien2 x 50k
+  assert.equal(parsed.tickets.length, 5);
+
+  const t1 = parsed.tickets.find(t => t.soList.includes('12') && t.soList.includes('14') && t.loai === 'Xien3');
+  const t2 = parsed.tickets.find(t => t.soList.includes('14') && t.soList.includes('24') && t.loai === 'Xien3');
+  const t3 = parsed.tickets.find(t => t.soList.includes('12') && t.soList.includes('53') && t.loai === 'Xien2');
+  const t4 = parsed.tickets.find(t => t.soList.includes('11') && t.soList.includes('22') && t.loai === 'Xien2');
+  const t5 = parsed.tickets.find(t => t.soList.includes('33') && t.soList.includes('44') && t.loai === 'Xien2');
+
+  assert.ok(t1);
+  assert.ok(t2);
+  assert.ok(t3);
+  assert.ok(t4);
+  assert.ok(t5);
+
+  assert.equal(t1.tienDat, 100);
+  assert.equal(t2.tienDat, 100);
+  assert.equal(t3.tienDat, 100);
+  assert.equal(t4.tienDat, 50);
+  assert.equal(t5.tienDat, 50);
+});
+
+test('warn on ambiguous xiên lines with only commas/dots', () => {
+  const parsed = core.parseTelegramEnvelope({
+    text: 'người 1:\nxiên 12,14,15,16,17,18 x 100n',
+    region: 'bac',
+    activeDai: ['Miền Bắc'],
+  });
+  assert.equal(parsed.warnings.length, 1);
+  assert.match(parsed.warnings[0], /xiên không rõ nhóm/);
+});

@@ -252,10 +252,12 @@ p {
   grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
   align-items: center;
   gap: 16px;
-  padding: 12px 20px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  padding: 14px 20px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--panel) 94%, var(--blue) 6%), color-mix(in srgb, var(--panel) 88%, var(--teal) 12%));
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--blue) 8%, transparent);
 }
 
 .brand {
@@ -270,12 +272,13 @@ p {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  background: #17202a;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #1e3a8a, #2563eb);
   color: #fff;
   font-weight: 900;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--blue) 35%, transparent);
 }
 
 [data-theme='dark'] .brand-mark {
@@ -285,13 +288,17 @@ p {
 
 .brand-title {
   font-size: 20px;
-  line-height: 1.1;
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: -0.02em;
 }
 
 .brand-subtitle {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .page-tabs {
@@ -744,8 +751,9 @@ p {
 .metric {
   position: relative;
   overflow: hidden;
-  padding: 12px;
+  padding: 14px 14px 14px 18px;
   border-color: color-mix(in srgb, var(--metric-color, var(--blue)) 22%, var(--line));
+  border-radius: 12px;
 }
 
 .metric::before {
@@ -1078,6 +1086,95 @@ tr:hover td {
 
 .sidebar-flow .section {
   overflow: visible;
+  border-color: color-mix(in srgb, var(--line) 88%, var(--blue) 12%);
+}
+
+.sidebar-flow .section + .section {
+  margin-top: 2px;
+}
+
+.filter-dropdown {
+  position: relative;
+}
+
+.filter-trigger {
+  max-width: min(320px, 72vw);
+}
+
+.filter-label {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chevron {
+  transition: transform 160ms ease;
+}
+
+.filter-dropdown.open .filter-chevron {
+  transform: rotate(180deg);
+}
+
+.filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 31;
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-option:hover,
+.filter-option:focus-visible {
+  background: var(--panel-soft);
+}
+
+.filter-option.checkbox {
+  cursor: pointer;
+}
+
+.filter-option input {
+  accent-color: var(--blue);
+}
+
+.ticket-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--panel-soft) 42%, transparent);
+}
+
+.ticket-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--blue) 8%, var(--panel-soft));
 }
 
 .rate-grid.header {

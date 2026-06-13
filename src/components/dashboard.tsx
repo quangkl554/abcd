@@ -6,7 +6,9 @@ import {
   AlertTriangle,
   Calculator,
   CheckCircle2,
+  ChevronDown,
   Edit3,
+  Filter,
   ListChecks,
   Plus,
   RefreshCw,
@@ -22,6 +24,15 @@ import { AppHeader } from './app-header';
 import { WorkDatePicker } from './work-date-picker';
 
 type Region = 'nam' | 'trung' | 'bac';
+
+const LOAI_FILTER_GROUPS = [
+  { id: 'lo', label: 'Bao lô (2C)', loai: ['Lo'] },
+  { id: 'dau-duoi', label: 'Đầu đuôi (2C)', loai: ['Dau', 'Duoi', 'DauDuoi'] },
+  { id: '3cang', label: '3 càng', loai: ['3Cang'] },
+  { id: 'xiu-chu', label: 'Xỉu chủ', loai: ['XiuChu', 'XiuChuDau', 'XiuChuDuoi', 'DauDuoi3C', 'Dau3C', 'Duoi3C'] },
+  { id: '4cang', label: '4 càng', loai: ['4Cang'] },
+  { id: 'xien', label: 'Xiên', loai: ['Xien2', 'Xien3', 'Xien4'] },
+] as const;
 
 type RateBucket = {
   heSoXac?: Record<string, number>;
@@ -139,6 +150,7 @@ export function Dashboard() {
   const [notice, setNotice] = useState('');
   const [dialog, setDialog] = useState<DashboardDialog | null>(null);
   const [dialogConfirm, setDialogConfirm] = useState('');
+  const [selectedLoaiFilter, setSelectedLoaiFilter] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
   const activePlayer = workspace?.players.find(player => player.id === selectedPlayerId) || null;
@@ -159,8 +171,17 @@ export function Dashboard() {
     if (!selectedPlayerId || !activePlayer) return tickets;
     return tickets.filter(ticket => ticket.player_id === selectedPlayerId || (!ticket.player_id && ticket.player_name === activePlayer.name));
   }, [activePlayer, selectedPlayerId, workspace?.tickets]);
+  const loaiFilteredTickets = useMemo(() => {
+    if (!selectedLoaiFilter.length) return filteredTickets;
+    const allowed = new Set(
+      LOAI_FILTER_GROUPS
+        .filter(group => selectedLoaiFilter.includes(group.id))
+        .flatMap(group => group.loai),
+    );
+    return filteredTickets.filter(ticket => allowed.has(ticket.loai));
+  }, [filteredTickets, selectedLoaiFilter]);
   const sortedTickets = useMemo(() => {
-    return [...filteredTickets].sort((a, b) => {
+    return [...loaiFilteredTickets].sort((a, b) => {
       const messageDiff = (messageOrder.get(a.ticket_message_id) || 0) - (messageOrder.get(b.ticket_message_id) || 0);
       if (messageDiff) return messageDiff;
       const lineA = ticketSourceLine(a, filteredMessages) ?? Number.MAX_SAFE_INTEGER;
@@ -168,7 +189,7 @@ export function Dashboard() {
       if (lineA !== lineB) return lineA - lineB;
       return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
     });
-  }, [filteredMessages, filteredTickets, messageOrder]);
+  }, [filteredMessages, loaiFilteredTickets, messageOrder]);
   const filteredMessageIds = useMemo(() => new Set(filteredMessages.map(message => message.id)), [filteredMessages]);
   const filteredIssues = useMemo(() => {
     const issues = workspace?.issues || [];
@@ -178,11 +199,11 @@ export function Dashboard() {
   const activeIssues = useMemo(() => groupOpenIssues(filteredIssues), [filteredIssues]);
   const totals = useMemo(() => {
     return {
-      tickets: filteredTickets.length,
-      xac: filteredTickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
-      win: filteredTickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
+      tickets: loaiFilteredTickets.length,
+      xac: loaiFilteredTickets.reduce((sum, ticket) => sum + Number(ticket.xac || 0), 0),
+      win: loaiFilteredTickets.reduce((sum, ticket) => sum + Number(ticket.tien_thang || 0), 0),
     };
-  }, [filteredTickets]);
+  }, [loaiFilteredTickets]);
 
   useEffect(() => {
     if (!workspace) return;
@@ -447,9 +468,15 @@ export function Dashboard() {
                 <h2 className="section-title"><CheckCircle2 size={18} /> Bảng vé</h2>
                 <p className="section-note">Bấm sửa ở dòng nào thì hệ thống thay lại vé của đúng dòng đó, các dòng khác giữ nguyên.</p>
               </div>
-              <span className="muted">{filteredTickets.length} dòng</span>
+              <div className="section-actions">
+                <LoaiFilterDropdown selected={selectedLoaiFilter} onChange={setSelectedLoaiFilter} />
+                <span className="muted">
+                  {loaiFilteredTickets.length} dòng
+                  {selectedLoaiFilter.length ? ` / ${filteredTickets.length}` : ''}
+                </span>
+              </div>
             </div>
-            <div className="table-wrap">
+            <div className="table-wrap ticket-table">
               <table>
                 <thead>
                   <tr>
@@ -489,7 +516,7 @@ export function Dashboard() {
                   })}
                 </tbody>
               </table>
-              {!filteredTickets.length ? <div className="empty-state">Chưa có vé của khách này trong ngày/miền đang chọn.</div> : null}
+              {!loaiFilteredTickets.length ? <div className="empty-state">{filteredTickets.length ? 'Không có vé nào khớp bộ lọc loại đang chọn.' : 'Chưa có vé của khách này trong ngày/miền đang chọn.'}</div> : null}
             </div>
           </section>
         </div>
@@ -687,6 +714,51 @@ function HighlightedSource({ text }: { text: string }) {
   );
 }
 
+function LoaiFilterDropdown({ selected, onChange }: { selected: string[]; onChange: (next: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const label = selected.length
+    ? LOAI_FILTER_GROUPS.filter(group => selected.includes(group.id)).map(group => group.label).join(', ')
+    : 'Tất cả loại';
+
+  function toggleGroup(groupId: string) {
+    onChange(
+      selected.includes(groupId)
+        ? selected.filter(id => id !== groupId)
+        : [...selected, groupId],
+    );
+  }
+
+  return (
+    <div className={`filter-dropdown ${open ? 'open' : ''}`}>
+      <button className="btn soft filter-trigger" type="button" onClick={() => setOpen(current => !current)}>
+        <Filter size={15} />
+        <span className="filter-label">{label}</span>
+        <ChevronDown size={15} className="filter-chevron" />
+      </button>
+      {open ? (
+        <>
+          <button className="filter-backdrop" type="button" aria-label="Đóng bộ lọc" onClick={() => setOpen(false)} />
+          <div className="filter-menu" role="menu">
+            <button className="filter-option" type="button" onClick={() => onChange([])}>
+              Tất cả loại
+            </button>
+            {LOAI_FILTER_GROUPS.map(group => (
+              <label className="filter-option checkbox" key={group.id}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(group.id)}
+                  onChange={() => toggleGroup(group.id)}
+                />
+                <span>{group.label}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function RatesEditor({ player, config, onSave, onDelete }: { player: Player; config: Workspace['config']; onSave: (rateProfile: Player['rate_profile']) => void; onDelete: () => void }) {
   const keys = Object.keys(config.heSoXacDefault);
   const [heSoXac, setHeSoXac] = useState<Record<string, number>>({});
@@ -717,8 +789,22 @@ function RatesEditor({ player, config, onSave, onDelete }: { player: Player; con
       {keys.map(key => (
         <div className="rate-grid" key={key}>
           <span>{RATE_LABELS[key] || key}</span>
-          <input className="input" type="number" value={heSoXac[key] ?? ''} onChange={event => setHeSoXac(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
-          <input className="input" type="number" value={tyLe[key] ?? ''} onChange={event => setTyLe(current => ({ ...current, [key]: Number(event.target.value || 0) }))} />
+          <input
+            className="input"
+            type="number"
+            value={heSoXac[key] ?? ''}
+            onChange={event => setHeSoXac(current => ({ ...current, [key]: Number(event.target.value || 0) }))}
+            onFocus={event => event.target.select()}
+            onWheel={event => event.currentTarget.blur()}
+          />
+          <input
+            className="input"
+            type="number"
+            value={tyLe[key] ?? ''}
+            onChange={event => setTyLe(current => ({ ...current, [key]: Number(event.target.value || 0) }))}
+            onFocus={event => event.target.select()}
+            onWheel={event => event.currentTarget.blur()}
+          />
         </div>
       ))}
       <div className="row rates-actions">

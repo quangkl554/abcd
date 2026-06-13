@@ -978,6 +978,8 @@ function detectDai(token, region) {
 
 function preprocessLine(line, region) {
   let s = normalizeVN(line);
+  s = s.replace(/[.,;\/]{2,}/g, ' ');
+  s = s.replace(/([.,;\/])\s+([.,;\/])/g, ' ');
   s = s.replace(/\u20ab/g, 'd');
   s = s.replace(/[₫]/g, 'd');
   s = s.replace(
@@ -998,6 +1000,9 @@ function preprocessLine(line, region) {
   s = s.replace(/(\d{2,}(?:\.\d+)?)\s+d\b/g, '$1n');
 
   const commonMap = {
+    'blmt': 'bl mtr',
+    'blmb': 'bl mb',
+    'blmn': 'bl mn',
     'bao lo': 'bl',
     'b lo': 'bl',
     'lo bao': 'bl',
@@ -1107,6 +1112,22 @@ function preprocessLine(line, region) {
 function expandCompactTokens(tokens, region) {
   const expanded = [];
   for (const tok of tokens) {
+    const dualStake = tok.match(/^(\d+(?:\.\d+)?)(n|k|d|m|diem|diểm|ngan|nghin|tr|trieu|triệu)(\d+(?:\.\d+)?)(n|k|d|m|diem|diểm|ngan|nghin|tr|trieu|triệu)$/i);
+    if (dualStake) {
+      const val1 = dualStake[1] + dualStake[2];
+      const val2 = dualStake[3] + dualStake[4];
+      const t1 = getTien(val1);
+      const t2 = getTien(val2);
+      if (t1 > 0 && t2 > 0) {
+        if (t1 === t2) {
+          expanded.push('dd', val1);
+        } else {
+          expanded.push('dau', val1, 'duoi', val2);
+        }
+        continue;
+      }
+    }
+
     if (
       tok === 'den' ||
       tok === 'phu' ||
@@ -1378,6 +1399,42 @@ function findWeirdCharacters(line) {
   return out.slice(0, 8);
 }
 
+function splitXienGroups(content) {
+  const hasComma = content.includes(',');
+  const hasDot = content.includes('.');
+
+  if (hasComma && hasDot) {
+    const countComma = (content.match(/,/g) || []).length;
+    const countDot = (content.match(/\./g) || []).length;
+    if (countDot <= countComma) {
+      return {
+        groups: content.split('.').map(g => g.trim()).filter(Boolean),
+        ambiguous: false
+      };
+    } else {
+      return {
+        groups: content.split(',').map(g => g.trim()).filter(Boolean),
+        ambiguous: false
+      };
+    }
+  }
+
+  const tokens = content.replace(/[,.]/g, ' ').split(/\s+/).filter(Boolean);
+  const numCount = tokens.filter(tok => /^\d{2,4}$/.test(tok)).length;
+
+  if (numCount > 4) {
+    return {
+      groups: [content],
+      ambiguous: true
+    };
+  }
+
+  return {
+    groups: [content],
+    ambiguous: false
+  };
+}
+
 function parseLegacyTickets(rawText, options = {}) {
   const region = canonicalRegion(options.region);
   const result = [];
@@ -1485,6 +1542,8 @@ function parseLegacyTickets(rawText, options = {}) {
     'mc',
     'mt',
     'mtr',
+    'mb',
+    'mn',
     'i',
     'bo',
     'tru',
@@ -1503,8 +1562,42 @@ function parseLegacyTickets(rawText, options = {}) {
     if (weirdChars.length) {
       warnings.push(`Dòng ${ln + 1}: có ký tự lạ "${weirdChars.join(' ')}", hệ thống đã bỏ qua ký tự này.`);
     }
-    const s = preprocessLine(originalLine, region);
-      const tokens = expandCompactTokens(s.split(' ').filter(Boolean), region);
+    let lineToProcess = originalLine;
+    const normalizedLine = normalizeVN(originalLine).trim();
+    const isXienLine = /^(xien|dx|da)\b/i.test(normalizedLine) || (carryLoai && (carryLoai === 'Xien' || carryLoai.startsWith('Xien')));
+    if (isXienLine) {
+      const stakeMatch = originalLine.match(/(?:\s+[x\*])?\s+(\d+(?:\.\d+)?\s*(?:n|k|d|m|diem|diểm|ngan|nghin|tr|trieu|triệu)?)$/i);
+      if (stakeMatch) {
+        const stakeStr = stakeMatch[0];
+        let content = originalLine.slice(0, originalLine.length - stakeStr.length).trim();
+        let prefix = '';
+        const prefixMatch = content.match(/^(xi[eê]n|dx|da)\s*/i);
+        if (prefixMatch) {
+          prefix = prefixMatch[0];
+          content = content.slice(prefix.length).trim();
+        }
+        const splitRes = splitXienGroups(content);
+        if (splitRes.ambiguous) {
+          warnings.push(`Dòng ${ln + 1}: xiên không rõ nhóm (chỉ có một loại dấu ngăn cách nhưng có nhiều số). Vui lòng dùng dấu chấm (.) để tách nhóm và dấu phẩy (,) để tách số (ví dụ: 12,14. 15,16. x 100n).`);
+        }
+        if (splitRes.groups.length >= 1) {
+          const rewrittenGroups = splitRes.groups.map(g => {
+            const cleanG = g.trim();
+            const groupTokens = cleanG.replace(/[,.]/g, ' ').split(/\s+/).filter(Boolean);
+            const groupNumCount = groupTokens.filter(tok => /^\d{2,4}$/.test(tok)).length;
+            const cleanPrefix = prefix.replace(/\d+$/, '').trim(); // strip any existing level digits at end
+            const newPrefix = (groupNumCount >= 2 && groupNumCount <= 4) ? `xien${groupNumCount}` : (cleanPrefix || 'xien');
+            return newPrefix + ' ' + cleanG + stakeStr;
+          });
+          if (rewrittenGroups.length > 1) {
+            lines.splice(ln + 1, 0, ...rewrittenGroups.slice(1));
+          }
+          lineToProcess = rewrittenGroups[0];
+        }
+      }
+    }
+    const s = preprocessLine(lineToProcess, region);
+    const tokens = expandCompactTokens(s.split(' ').filter(Boolean), region);
     if (tokens.length === 0) continue;
 
     const hasStake = tokens.some(hasStakeToken);
@@ -1766,6 +1859,17 @@ function parseLegacyTickets(rawText, options = {}) {
         if (ds) {
           applyOrSetDais(ds, i + 1);
         }
+        i++;
+        continue;
+      }
+
+      if (
+        (tok === 'x' || tok === '*') &&
+        numBuf.length > 0 &&
+        currentLoai === 'Xien' &&
+        i + 1 < tokens.length &&
+        getStakeTien(tokens[i + 1]) > 0
+      ) {
         i++;
         continue;
       }
