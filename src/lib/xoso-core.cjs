@@ -1216,7 +1216,10 @@ function expandRangeIntoBuffer(numBuf, endToken) {
     const e1 = endNum % 10;
     const s10 = Math.floor(startNum / 10);
     const e10 = Math.floor(endNum / 10);
-    if (s1 === e1) step = 10;
+    if (startTok[0] === startTok[1] && endToken[0] === endToken[1]) {
+      step = 11;
+      if (startNum === 0) numBuf.pop();
+    } else if (s1 === e1) step = 10;
     else if (s10 === e10) step = 1;
   } else if (len === 3) {
     const s2 = startNum % 100;

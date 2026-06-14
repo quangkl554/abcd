@@ -858,7 +858,16 @@ test('parse glued number/type/stake tokens inside parentheses', () => {
 
 test('parse keo ranges with filler words', () => {
   const parsed = core.parseTelegramEnvelope({
-    text: 'nguoi 1:\n123 keo luon nha 923 b 5n\n101 den 109 dd 10n\n02 keo 92 b 1n',
+    text: [
+      'nguoi 1:',
+      '123 keo luon nha 923 b 5n',
+      '101 den 109 dd 10n',
+      '02 keo 92 b 1n',
+      '01 den 09 b 1n',
+      '10 den 90 b 1n',
+      '00 den 99 b 1n',
+      '11 den 99 b 1n',
+    ].join('\n'),
     region: 'nam',
     activeDai: ['TP.HCM'],
   });
@@ -866,6 +875,10 @@ test('parse keo ranges with filler words', () => {
   assert.deepEqual(parsed.tickets[0].soList, ['123', '223', '323', '423', '523', '623', '723', '823', '923']);
   assert.deepEqual(parsed.tickets[1].soList, ['101', '102', '103', '104', '105', '106', '107', '108', '109']);
   assert.deepEqual(parsed.tickets[2].soList, ['02', '12', '22', '32', '42', '52', '62', '72', '82', '92']);
+  assert.deepEqual(parsed.tickets[3].soList, ['01', '02', '03', '04', '05', '06', '07', '08', '09']);
+  assert.deepEqual(parsed.tickets[4].soList, ['10', '20', '30', '40', '50', '60', '70', '80', '90']);
+  assert.deepEqual(parsed.tickets[5].soList, ['11', '22', '33', '44', '55', '66', '77', '88', '99']);
+  assert.deepEqual(parsed.tickets[6].soList, ['11', '22', '33', '44', '55', '66', '77', '88', '99']);
 });
 
 test('parse dd with two stakes as dau and duoi stakes', () => {
